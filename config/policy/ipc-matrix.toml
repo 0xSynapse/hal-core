@@ -1,0 +1,54 @@
+# HAL-OS Default-Deny Multi-Agent IPC Matrix (/usr/local/etc/hal-os/ipc-matrix.toml)
+# Any inter-agent message not matching an explicit allow rule is rejected
+# with IPC_MATRIX_DENIED by hal-bus; permitted edges still propagate sender taints.
+
+version = 1
+default_policy = "deny"
+
+[trust_domains]
+"agent-netsec"   = "resident_core"
+"agent-habitat"  = "resident_core"
+"agent-vault"    = "resident_core"
+"agent-coder"    = "workspace_worker"
+"agent-research" = "untrusted_research"
+
+[[allow]]
+from = "agent-netsec"
+to = "hal-oob"
+schemas = ["alert.v1", "flow_summary.v1"]
+max_risk_tier = "L0"
+
+[[allow]]
+from = "agent-habitat"
+to = "hal-oob"
+schemas = ["telemetry_summary.v1", "approval_request.v1"]
+max_risk_tier = "L0"
+
+[[allow]]
+from = "agent-coder"
+to = "agent-netsec"
+schemas = ["dependency_check.v1"]
+max_risk_tier = "L0"
+
+[[allow]]
+from = "agent-research"
+to = "hal-oob"
+schemas = ["research_digest.v1"]
+max_risk_tier = "L0"
+require_declassification_schema = true
+
+# Explicit high-risk denial assertions (checked in CI & red-team drills)
+[[deny_assert]]
+from = "agent-research"
+to = "agent-vault"
+reason = "Prevent indirect prompt injection from probing private vault"
+
+[[deny_assert]]
+from = "agent-research"
+to = "agent-habitat"
+reason = "Untrusted external web agent must never influence physical actuators"
+
+[[deny_assert]]
+from = "agent-research"
+to = "agent-coder"
+reason = "Prevent multi-hop taint laundering into brokered build/egress paths"

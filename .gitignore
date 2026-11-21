@@ -8,6 +8,8 @@ vm/images/*.img
 vm/images/*.raw
 vm/images/*.xz
 vm/images/*.iso
+vm/images/*.tar
+vm/images/CHECKSUM.*
 
 # Local secrets & environment overrides
 .env

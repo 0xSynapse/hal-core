@@ -1,0 +1,18 @@
+# HAL-OS Phase 0 system services configuration (/etc/rc.conf.d/hal)
+hostname="hal-os-node0"
+
+# Separate OOB management plane (mgmt0) and zero-trust egress plane (wan0)
+ifconfig_vtnet0_name="mgmt0"
+ifconfig_vtnet1_name="wan0"
+ifconfig_mgmt0="inet 192.168.100.10 netmask 255.255.255.0"
+ifconfig_wan0="SYNCDHCP"
+
+# Spinal cord subsystems
+zfs_enable="YES"
+pf_enable="YES"
+pf_rules="/etc/pf.conf"
+pflog_enable="YES"
+pflog_logfile="/var/log/pflog"
+jail_enable="YES"
+rctl_enable="YES"
+sshd_enable="YES"
