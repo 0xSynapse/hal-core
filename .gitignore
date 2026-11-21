@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# QEMU / KVM VM disk images & installation media
+vm/images/*.qcow2
+vm/images/*.img
+vm/images/*.raw
+vm/images/*.xz
+vm/images/*.iso
+
+# Local secrets & environment overrides
+.env
+.env.*
+*.key
+*.pem
+
+# Editor & OS temporary files
+.DS_Store
+*.swp
+*~
