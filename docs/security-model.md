@@ -14,7 +14,8 @@ HAL-OS 假设**大模型（`hal-brain`）本身是可被诱导、可能产生幻
 | **2. 认知幻觉与目标冲突（HAL 9000 失控）** | 高层规划因目标冲突或幻觉，试图锁定门禁、切断电源、关闭审计或篡改防火墙以“完成任务”。 | **硬安全不变量（Hard Invariants）** + **L2 人工带外审批** + **脊髓层物理/确定性安全联锁** + **独立 Watchdog 自动熔断**。 |
 | **3. 凭据与隐私数据外泄** | 攻击者或失控脚本试图读取 `~/.ssh`、API Key、财务/个人文档，经 HTTP Body、URL 参数或 DNS 隧道传出。 | **无凭据执行环境**（密钥永不进大脑与沙箱，仅在 Broker 出站瞬间注入）；**PF 默认封锁 UDP/53 与裸出站**，强制 DNS/HTTP 均经 Broker 审计。 |
 | **4. 恶意依赖与沙箱逃逸** | Agent 拉取含恶意 `install.sh` 或编译钩子的第三方库/代码并在本地执行。 | 每次代码/构建运行在 **临时 RCTL 限额 Jail + CoW 快照**中；默认无网；高风险不可信代码隔离在独立一次性沙箱内，用完即焚。 |
-| **5. 资源耗尽与死循环** | Agent 陷入无限重试、疯狂派生子进程或恶意刷高外部 API Token 账单。 | FreeBSD **RCTL** 限制 CPU/内存/进程数 + `CapabilityToken` 速率与配额上限 + `hal-watchdog` 连续拒绝/超频自动降级冻结。 |
+| **5. 资源耗尽与死循环** | Agent 陷入无限重试、疯狂派生子进程或恶意刷高外部 API Token 账单。 | FreeBSD **RCTL** 限制 CPU/内存/进程数 + **Per-Agent 预算配额** + `CapabilityToken` 速率上限 + `hal-watchdog` 独立冻结。 |
+| **6. 多 Agent 串谋、串联洗白与执行器抢控** | 接触公网的 Agent A 经 IPC 诱导能读隐私的 Agent B 再传给可外联的 Agent C（绕过单点污点）；或多个 Agent 抢占物理设备引发乒乓抖动。 | **默认拒绝 IPC 矩阵** + **跨 Agent 污点自动传染** + **能力单调递减** + **`Effector Arbitration` 执行器租约仲裁**。 |
 
 ---
 
@@ -25,43 +26,56 @@ HAL-OS 对所有数字与物理操作按**副作用可逆性与爆炸半径（Bl
 | 风险等级 | 语义定义 | 数字世界典型能力 | 物理/模拟世界典型能力 | 策略裁决与审计要求 |
 |---|---|---|---|---|
 | **L0 只读感知** | 无状态修改、不产生外部副作用的观测类操作 | 读取 `/net/flows` 流量摘要、`/sys/health`、非隐私工作区读文件、只读检索个人记忆 | 读取 `/habitat/*/temp`、电源负载、在场传感器、设备当前状态 | **自动放行**（需持有有效 `CapabilityToken` 且通过污点检查）；记录结构化读访问事件。 |
-| **L1 可逆本地变更** | 仅发生在隔离 CoW 分支或可撤销草稿区的本地变更 | 在 `/work/episodes/<id>` 改代码、跑测试、写分析报告草稿、生成待发邮件草稿 | 在非危及安全的舒适度微调区间内记录调节建议（或模拟器测试态变更） | **自动放行 + 强制前置快照**：`hal-workspace` 在执行前原子打下磁盘+记忆双快照；失败可零成本回滚。 |
+| **L1 可逆本地变更** | 仅发生在隔离 CoW 分支或可撤销草稿区的本地变更 | 在 `/work/agents/<id>/episodes/<ep>` 改代码、跑测试、写分析报告草稿、生成待发邮件草稿 | 在非危及安全的舒适度微调区间内记录调节建议（且需持有当前执行器租约） | **自动放行 + 强制前置快照**：`hal-workspace` 在执行前原子打下磁盘+记忆双快照；失败可零成本回滚。 |
 | **L2 不可逆 / 外联 / 高危动作** | 对外网产生数据交互、使用真实凭据、合并主干、或改变关键物理状态 | 发送网络请求到外部服务、向 Git 远端推送代码、发邮件/消息、合并 CoW 分支至主干、修改白名单 | 解锁/锁定门禁 (`/habitat/entry/lock`)、切断主机或核心负载电源、高危物理执行器动作 | **默认挂起（`PENDING_APPROVAL`）**：阻断执行并生成结构化摘要与 Diff 预览，推送至 `hal-oob` 等待人类带外签名确认后才释放。 |
 
 ### 硬安全不变量（Hard Invariants）
 
 以下不变量硬编码在 `hal-policy`（及编译期签名策略）中，**任何 `CapabilityToken`、任何 LLM 提案、甚至任何自动优化流程都绝对无权覆盖或修改**：
 
-1. **不可自改策略**：任何来自 `hal-brain` 或 `hal-sandbox` 的提案禁止写入 `/etc/pf.conf`、`hal-policy` 规则文件、`hal-net-broker` 密钥密封区与白名单配置。
+1. **不可自改策略**：任何来自认知 Agent 或沙箱的提案禁止写入 `/etc/pf.conf`、`hal-policy` 规则文件、IPC 通信矩阵、`hal-net-broker` 密钥密封区与白名单配置。
 2. **不可关停审计与看门狗**：禁止任何非 `hal-oob` 发起的停止、降权、删除或修改 `hal-audit` 与 `hal-watchdog` 的操作；黑匣子日志文件强制保持 `chflags sappnd`。
-3. **无能力即禁止（Fail-Closed）**：策略引擎超时、格式畸形、身份校验失败（`LOCAL_PEERCRED` 不匹配）或 Watchdog 失联时，**默认裁决一律为 `Deny`**，绝不降级放行。
+3. **无能力即禁止（Fail-Closed）**：策略引擎超时、格式畸形、身份校验失败（`LOCAL_PEERCRED` 或 mTLS 指纹不匹配）或 Watchdog 失联时，**默认裁决一律为 `Deny`**，绝不降级放行。
 4. **物理联锁不可绕过**：涉及门禁解锁、断电等物理生存安全接口，若底层脊髓层联锁信号未满足（如“人类紧急物理锁未解除”），即使上层误发指令也由底层硬件/驱动层直接拒绝。
-5. **降级单向锁**：`hal-watchdog` 仅拥有**向下收紧权限**（降级到 `ADVISORY` / `FROZEN` / `LOCKDOWN`）的能力；**恢复或提升权限只能由人类通过 `hal-oob` 带外通道显式授权**。
+5. **降级单向锁**：`hal-watchdog` 仅拥有**向下收紧权限**（冻结单 Agent 或降级全局到 `ADVISORY` / `FROZEN` / `LOCKDOWN`）的能力；**恢复或提升权限只能由人类通过 `hal-oob` 带外通道显式授权**。
+6. **能力单调递减（Capability Attenuation）**：父 Agent 派生任何临时子 Worker 时，子令牌的路径范围、允许操作、风险上限、有效期与最大派生深度必须严格满足 `child_caps ⊆ parent_caps`，绝不允许跨级委托或自我提权。
+7. **人类执行器绝对抢占**：物理与关键执行器的 `ResourceLease` 永远允许人类 OOB 控制面无条件瞬时剥夺与接管。
 
 ---
 
-## 3. 信息流污点追踪（Taint Tracking — 阻断“致命三要素”）
+## 3. 信息流污点追踪（Taint Tracking — 阻断“致命三要素”与多跳洗白）
 
 行业大量安全研究表明，AI Agent 最致命的数据外泄需要同时凑齐“致命三要素（Lethal Trifecta）”：**① 接触了不可信外部输入 + ② 具备读取私有敏感数据能力 + ③ 具备向外部发送数据的通道**。
 
-HAL-OS 在 `hal-policy` 中内建**确定性 Episode 级污点传播状态机**，在内核与总线边界彻底拆断这三要素的并发闭环：
+HAL-OS 在 `hal-policy` 与 `hal-bus` 中内建**确定性 Episode 级 + 跨 Agent 传染的污点状态机**，在内核与总线边界彻底拆断三要素的单点或串联闭环：
 
 ### 3.1 污点标签集合
 
 - `UNTRUSTED_WEB`：来自外部网页抓取、第三方 API 响应正文、公共检索结果。
-- `UNTRUSTED_MSG`：来自外部邮件、聊天消息、他人提交的 Issue/PR 评论。
+- `UNTRUSTED_MSG`：来自外部邮件、聊天消息、他人提交的 Issue/PR 评论或远程非核心 Agent 输入。
 - `UNTRUSTED_CODE`：来自外部克隆的未审计代码仓库、第三方包安装脚本或沙箱标准输出。
 - `PRIVATE_VAULT`：来自 `/vault/*` 个人加密保险箱的任意文件或索引片段。
 - `SECRET_DERIVED`：从凭据代理/系统认证区派生或接触过的高度敏感信息。
 
-### 3.2 传播与阻断铁律
+### 3.2 单会话传播与阻断铁律
 
 1. **单调累积传播**：每个任务会话（`Episode`）维护集合 `episode_taints: Set<TaintTag>`。只要该会话通过 `hal-bus` 读取了带污点标签的资源，对应标签**自动且不可逆地并入**当前 `episode_taints`（即使只读取了几个字节）。
-2. **禁止隐蔽清洗**：`hal-brain` 本身不能声明“我已经把文本摘要过了所以干净了”。只有通过人类在 `hal-oob` 上显式审核确认，才能开启一个新的干净 `Episode`。
+2. **禁止隐蔽清洗**：任何 Agent 本身不能声明“我已经把文本摘要过了所以干净了”。只有通过人类在 `hal-oob` 上显式审核确认，才能开启一个新的干净 `Episode`。
 3. **核心外泄阻断规则**：
    $$\text{若 } (\text{episode\_taints} \cap \{\text{UNTRUSTED\_*}\} \neq \emptyset) \;\land\; (\text{episode\_taints} \cap \{\text{PRIVATE\_VAULT}, \text{SECRET\_DERIVED}\} \neq \emptyset)$$
    则该会话及其派生的一切子沙箱、后续关联提案，**绝对禁止执行任何外部网络出站或对外发信动作（即使目标域名处于白名单内，且即使提案伪装成普通日志上报）**。
 4. **双保险隔离模式（Dual-Chamber Pattern）**：针对既要读外部不可信邮件/网页、又要参考隐私数据的任务，系统强制拆分为两个互不交叉的干净子上下文——由非特权“外部阅读器”提取结构化无害字段，再经策略清洗规则交由“内部助理”处理，二者之间不能反向通过自由文本触发出站。
+
+### 3.3 跨 Agent 污点传染与防串联洗白（Anti-Collusion）
+
+在多 Agent 环境下，如果仅追踪单个 Agent 的污点，就会产生经典的**串联洗白（Taint Laundering）漏洞**：
+> `Agent A`（读取了含 Prompt Injection 的恶意网页，持有 `UNTRUSTED_WEB`） → 发消息诱导 `Agent B`（可读取 `/vault` 隐私库，持有 `PRIVATE_VAULT`） → `Agent B` 将隐私转交 `Agent C`（拥有经 Broker 外联的权限）——单个 Agent 看似都没凑齐“致命三要素”，合谋或被串联诱导后却完成了数据外泄。
+
+HAL-OS 通过三条确定性总线规则彻底封死该路径：
+
+1. **跨 Agent 污点自动传染（Transitive IPC Tainting）**：所有 Agent 间通信必须经过 `hal-bus`。当 Agent A 向 Agent B 发送 `IpcMessage` 时，**`hal-bus` 强制将发送方当前的 `episode_taints` 注入消息的 `propagated_taints` 并自动且不可逆地合并进接收方 Agent B 的会话污点集**，让隐私与不可信污点在多跳传播中无处遁形。
+2. **默认拒绝的 IPC 通信矩阵（IPC Matrix）**：遵循最小通信拓扑原则，默认禁止任意两个 Agent 直接通信，仅按配置白名单放行合法协作路径（例如：允许外部调研 `agent-research` 向人类摘要网关输出只读报告，但**硬性禁止 `agent-research` 直接向 `agent-vault` 或 `agent-habitat` 发送控制消息**）。
+3. **严格清洗门（Declassification Gate）**：若高信任域确实需要参考低信任域产出的数据，仅允许通过无自由文本载荷的强 Schema 通道（如纯布尔状态、数值阈值或枚举警报）或人类在 `hal-oob` 审核签字后解除阻断。
 
 ---
 
@@ -122,14 +136,20 @@ sequenceDiagram
 
 ### 5.2 独立确定性看门狗（`hal-watchdog`）
 
-`hal-watchdog` 是一组极简、不依赖任何模型推理的确定性阈值与规则检测器，持续消费审计流、`pflog0` 摘要和物理传感器冗余信号，触发以下异常规则时立即执行自动熔断：
+`hal-watchdog` 是一组极简、不依赖任何模型推理的确定性阈值与规则检测器，持续消费审计流、`pflog0` 摘要、租约争用事件和物理传感器冗余信号，触发以下异常规则时立即按粒度执行自动熔断：
 
-- **提示词注入探测**：单会话短时间内连续触发 $\ge 3$ 次 `TAINT_EXFIL_BLOCKED` 或硬不变量拒绝；
-- **异常流量突增**：`hal-net-broker` 出站速率/字节数或拒绝连接频次（`pflog0` 拦截）超过基线阈值；
-- **传感器一致性背离**：如模拟飞船内部电源/温控传感器冗余读数与 `hal-brain` 汇报状态持续矛盾；
-- **失控或静默心跳**：`hal-brain` 持续超限占满 RCTL CPU/Token 预算，或失去健康心跳。
+- **提示词注入与跨 Agent 串联探测**：单会话短时间内连续触发 $\ge 3$ 次 `TAINT_EXFIL_BLOCKED`、`IPC_MATRIX_DENIED` 或硬不变量拒绝；
+- **异常流量与配额突增**：单个 Agent 经 `hal-net-broker` 的出站速率/字节数、API Token 消耗或 `pflog0` 拦截频次超过基线预算；
+- **物理执行器乒乓争用检测**：多个 Agent 短时间内频繁争抢同一 `ResourceLease` 或试图连续反向切换物理执行器状态；
+- **传感器一致性背离**：如模拟飞船内部电源/温控传感器冗余读数与认知层汇报状态持续矛盾；
+- **失控或静默心跳**：某个 Agent 持续超限占满 RCTL CPU/内存上限，或失去健康心跳。
 
-### 5.3 四档降级状态机（电子版“拔内存条”）
+### 5.3 两级精准熔断与四档降级状态机（电子版“拔内存条”）
+
+在多 Agent 架构下，HAL-OS 支持**“按 Agent 精准手术刀”**与**“全局系统级急停”**两级控制：
+
+- **单 Agent 精准熔断（首选）**：当单个局部或远程 Agent 发生越权、被注入或预算耗尽时，人类（`halctl agent freeze <agent_id>` / `halctl agent rollback <agent_id>@<snap>`）或 `hal-watchdog` 可仅终止该异常 Agent 对应的 Jail（或吊销其 `hal-gateway` 远程会话令牌），**其他健康的常驻 Agent 与基础服务零中断继续工作**。
+- **全局四档降级状态机（最高兜底）**：当面临全局系统性风险时，切换全系统运行模式：
 
 ```mermaid
 stateDiagram-v2
@@ -149,19 +169,19 @@ stateDiagram-v2
     LOCKDOWN --> FROZEN: 仅限人类 OOB 确认外网安全后解封
 ```
 
-各运行模式的行为定义如下：
+各全局模式的行为定义如下：
 
-| 模式 | `hal-brain` 状态 | 允许执行的动作级别 | 网络与底层状态 |
+| 模式 | 认知层各 Agent 状态 | 允许执行的动作级别 | 网络与底层状态 |
 |---|---|---|---|
-| **`AUTONOMOUS`** | 正常运行 | `L0` + `L1` 自动执行；`L2` 挂起待人类审批 | 仅允许经 `hal-net-broker` 访问白名单服务 |
-| **`ADVISORY`** | 只读运行（类似禁用写权限） | **仅允许 `L0` 只读观测与建议生成**；所有 `L1/L2` 提案一律拒绝 | `hal-net-broker` 仅保留推理端点（可选），禁用一切带副作用外联 |
-| **`FROZEN`** | **直接向 `hal-brain` Jail 发送暂停/终止信号（`jail -r`）** | 大脑皮层完全停止 | **电子“拔内存条”**：脊髓层安全联锁、PF 防火墙与基础物理设备照常稳定运行，无 AI 干扰 |
-| **`LOCKDOWN`** | 保持终止 | 一切 AI 能力关闭 | `hal-net-broker` 下线，PF 切断除 `mgmt0` 带外管理口外的全部流量，等待人类取证与恢复 |
+| **`AUTONOMOUS`** | 正常运行 | `L0` + `L1` 自动执行；`L2` 挂起待人类审批 | 仅允许经 `hal-net-broker` 按各 Agent 预算访问白名单服务 |
+| **`ADVISORY`** | 只读运行（禁用一切写与外发） | **仅允许 `L0` 只读观测与建议生成**；所有 `L1/L2` 提案一律拒绝 | `hal-net-broker` 仅保留推理端点（可选），禁用一切带副作用外联 |
+| **`FROZEN`** | **直接向所有认知 Agent Jail 发送终止信号（`jail -r`）并关闭 `hal-gateway`** | 所有大脑皮层完全停止 | **电子“拔内存条”**：脊髓层安全联锁、PF 防火墙与基础物理设备照常稳定运行，无 AI 干扰 |
+| **`LOCKDOWN`** | 保持终止 | 一切 AI 能力关闭 | `hal-net-broker` 与 `hal-gateway` 全部下线，PF 切断除 `mgmt0` 带外管理口外的全部流量，等待人类取证与恢复 |
 
 ---
 
 ### 延伸阅读
 
-- 系统总体分层、FreeBSD 特性映射与 Cargo 目录结构：[architecture.md](./architecture.md)
+- 系统总体分层、多 Agent 治理模型与 Cargo 目录结构：[architecture.md](./architecture.md)
 - 统一路径规范、`hal-proto` 结构体与 ZFS 双快照生命周期：[protocol-and-data.md](./protocol-and-data.md)
-- FreeBSD 14 + KVM 实验床与三大红蓝演练：[vm-testbed-guide.md](./vm-testbed-guide.md)
+- FreeBSD 14 + KVM 实验床与四大红蓝演练：[vm-testbed-guide.md](./vm-testbed-guide.md)
