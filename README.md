@@ -1,8 +1,16 @@
-# HAL-OS
+<p align="center">
+  <img src="./assets/hal-os-logo.png" alt="HAL-OS Logo" width="220" />
+</p>
 
-**An AI-Agent-Native Personal Operating System built on FreeBSD 14 and Rust.**
+<h1 align="center">HAL-OS</h1>
 
-> **Status:** Design & Phase 0 Bootstrap (Pre-Alpha)
+<p align="center">
+  <strong>An AI-Agent-Native Personal Operating System built on FreeBSD 14 and Rust.</strong>
+</p>
+
+<p align="center">
+  <em>Design &amp; Phase 0 Bootstrap (Pre-Alpha)</em>
+</p>
 
 ---
 
