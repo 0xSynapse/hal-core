@@ -15,7 +15,10 @@ pub use agent::{
     AgentRole, CognitiveAgent, CognitiveTransport, LocalBusTransport, RemoteGatewayTransport,
 };
 pub use memory::{EpisodicMemoryStore, MemoryEntry};
-pub use planner::{BrokeredLlmClient, MockLlmHttpServer, MockLlmHttpServerHandle, PlannedStep};
+pub use planner::{
+    extract_json_array_payload, BrokeredLlmClient, LlmPlanConfig, MockLlmHttpServer,
+    MockLlmHttpServerHandle, PlannedStep,
+};
 
 #[derive(Debug)]
 pub enum BrainError {

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <em>Phases 0–5A Implemented · 18-Crate Rust Workspace · FreeBSD 14.5 KVM E2E + Tri-Node Loop Verified</em>
+  <em>Phases 0–5B Implemented · 19-Crate Rust Workspace · FreeBSD 14.5 KVM + Multi-Process Daemons Verified</em>
 </p>
 
 ---
@@ -35,7 +35,7 @@ Instead of forcing one "OS" onto every device, each node plays a strictly scoped
 | Node | Role & Stack | Security Boundary |
 | :--- | :--- | :--- |
 | **Laptop (`Aegis OS` + `hal-bridge`)** | Interactive coding agents (`AGY`, `Claude Code`, `Codex`) connect over WireGuard (`wg-agent`) via `hal-bridge` JSON-RPC 2.0 MCP stdio server (`hal_ping`, `hal_vault_read`, `hal_propose_action`, `hal_send_ipc`, `hal_publish_event`). | Zero host SSH, zero raw API keys; `RemoteAuthHandshake` + HMAC cert proof-of-possession + short-lived `CapabilityToken`; `L2` actions wait in queue. |
-| **Home Fortress (`HAL Core` on FreeBSD 14)** | 18-crate Rust brainstem & Habitat adapters over OpenZFS, `No-IP`/`VNET` Jails, `Capsicum`, `PF` default-deny (`user _hal_broker`), `RCTL` caps, and `chflags sappnd` audit chain. | Default-deny IPC Matrix with transitive cross-agent tainting; secretless egress + DLP; atomic disk + AI-memory dual-snapshots. |
+| **Home Fortress (`HAL Core` on FreeBSD 14)** | 19-crate Rust brainstem & Habitat adapters over OpenZFS, `No-IP`/`VNET` Jails, `Capsicum`, `PF` default-deny (`user _hal_broker`), `RCTL` caps, `rc.d/hal_core`, and `chflags sappnd` audit chain. | Default-deny IPC Matrix with transitive cross-agent tainting; HTTPS + OpenAI-compatible secretless egress (`CurlHttpsTransport`) + DLP; atomic disk + AI-memory dual-snapshots. |
 | **Phone / Browser (`HAL Key` Mobile PWA)** | Embedded single-file mobile PWA served by `hal-oob` over `mgmt0` / WireGuard (`wg-oob`). | `X-Hal-Oob-Token` constant-time auth + `CSP` + `X-Frame-Options: DENY` + non-wildcard bind invariant; OOB control invisible to all agents. |
 
 ```mermaid
@@ -110,6 +110,7 @@ flowchart TD
         AD_NET["adapter-netmon (PF / pflog0 Flow Telemetry)"]
         AD_VAULT["adapter-vault (Encrypted Personal Vault Access)"]
         AD_WORK["adapter-work (Code & Build Sandbox Adapter)"]
+        AD_DIGEST["adapter-digest (RSS/Atom & GitHub Tainted Feeds)"]
         AD_PHYS["adapter-sim-ship (Simulated Cyber-Physical Effectors)"]
     end
 
@@ -180,34 +181,34 @@ FreeBSD 14 provides orthogonal, tightly integrated kernel and base-system primit
 
 ---
 
-## Rust Cargo Workspace Layout (18 Crates)
+## Rust Cargo Workspace Layout (19 Crates)
 
 ```text
 hal-os/
-├── Cargo.toml                  # 18-crate Rust workspace manifest
+├── Cargo.toml                  # 19-crate Rust workspace manifest
 ├── docs/                       # Detailed architecture, security, protocol & VM specs
 ├── crates/
 │   ├── hal-proto/              # OS-agnostic AgentPrincipal, IpcMessage, ResourceLease, CapabilityToken, TaintTag, AuditRecord
 │   ├── hal-os-hal/             # OS abstraction traits + FreeBSD backends (ZFS/Jail/PF/Capsicum/RCTL/PeerCred)
-│   ├── hal-bus/                # Unix Domain Socket bus, Agent Registry, IPC Matrix, transitive tainting & lease arbiter
-│   ├── hal-gateway/            # Remote/laptop agent ingress via WireGuard/mTLS + HMAC proof + replay defense
+│   ├── hal-bus/                # Unix Domain Socket bus daemon (--serve), Agent Registry, IPC Matrix, transitive tainting & leases
+│   ├── hal-gateway/            # Remote/laptop agent WireGuard/mTLS daemon (--serve) + HMAC proof + replay defense
 │   ├── hal-bridge/             # Laptop CLI + JSON-RPC 2.0 MCP stdio server (`hal_vault_read`, `hal_propose_action`, etc.) + Tri-Node demo
 │   ├── hal-policy/             # L0/L1/L2 gatekeeper, capability attenuation, taint state machine & hard invariants
 │   ├── hal-audit/              # SHA-256 hash-chained append-only black box
-│   ├── hal-net-broker/         # Secretless HTTP/HTTPS/DNS egress proxy, allowlist, secret injection, DLP & per-agent quotas
+│   ├── hal-net-broker/         # Secretless HTTP/HTTPS egress proxy (CurlHttpsTransport), allowlist, DLP & per-agent quotas
 │   ├── hal-workspace/          # ZFS CoW branching & atomic disk/memory dual-snapshots
 │   ├── hal-sandbox/            # Jail + VNET + RCTL ephemeral sandbox orchestrator
-│   ├── hal-watchdog/           # Deterministic anomaly detector & per-agent/global circuit breaker
-│   ├── hal-oob/                # Out-of-band human control plane: REST API, embedded HAL Key Mobile PWA, `halctl`, & virtio-console
-│   ├── hal-brain/              # Unprivileged cognitive runtime template for resident & worker agents
+│   ├── hal-watchdog/           # Deterministic anomaly detector & circuit breaker daemon (--serve)
+│   ├── hal-oob/                # Out-of-band human control plane: REST daemon (--serve), embedded HAL Key Mobile PWA, `halctl`, & virtio-console
+│   ├── hal-brain/              # Unprivileged cognitive runtime & OpenAI-compatible brokered LLM planner
 │   └── hal-adapters/
 │       ├── adapter-netmon/     # PF / pflog0 & libxo network flow telemetry adapter
 │       ├── adapter-vault/      # Encrypted personal data vault adapter (PRIVATE_VAULT taint)
 │       ├── adapter-work/       # Code & build sandbox workflow adapter
+│       ├── adapter-digest/     # Brokered RSS/Atom & GitHub public feed digest adapter (UNTRUSTED_WEB taint + declassification)
 │       └── adapter-sim-ship/   # Cyber-physical "HAL 9000 ship" simulator for testbed drills
-│                               # (adapter-mqtt for real smart-home hardware planned in Phase 5B)
-├── config/                     # Default policies, IPC matrix, domain allowlists, sample laptop bridge config, pf.conf & jail.conf
-├── vm/                         # QEMU/KVM provisioning & E2E verification scripts for FreeBSD 14.5
+├── config/                     # Policies (incl. live LLM/RSS allowlist example), bridge config, FreeBSD pf.conf, rc.d/hal_core, wg-*.conf
+├── vm/                         # QEMU/KVM provisioning, Phase 5B FreeBSD daemon deploy script, & E2E verification
 └── tests/
     └── redteam/                # Automated prompt-injection, collusion, rollback, arbitration & freeze drills
 ```
@@ -221,7 +222,7 @@ hal-os/
 cargo test --workspace --offline
 cargo clippy --workspace --all-targets --offline -- -D warnings
 ```
-All 18 workspace crates currently pass **56 tests (0 failures)** and **0 clippy warnings**, including all unit tests, Phase 1–3 acceptance suites, 4 flagship red-team drills, and Phase 5A Tri-Node E2E tests.
+All 19 workspace crates currently pass **65 tests (0 failures)** and **0 clippy warnings**, including all unit tests, Phase 1–3 acceptance suites, 4 flagship red-team drills, Phase 5A Tri-Node E2E tests, and Phase 5B multi-process live daemon + `adapter-digest` integration tests.
 
 ### Launch Interactive Tri-Node Playground (`HAL Core` + `HAL Key` PWA + `hal-bridge` MCP)
 ```bash
@@ -246,8 +247,9 @@ See [docs/vm-testbed-guide.md](./docs/vm-testbed-guide.md) and [`vm/phase0-e2e.p
 - [x] **Phase 2 — Zero-Trust Network, Leases & Transactional Sandboxes**: `hal-net-broker` (allowlist + secret injection + DLP + per-agent budgets), `hal-workspace` (per-agent dual-snapshots/rollback), `ResourceLease` / effector arbitration, and `hal-sandbox`.
 - [x] **Phase 3 — OOB Control Plane, Gateway & Cyber-Physical Simulator**: `hal-gateway` (remote agent ingress), `hal-oob` / `halctl` (including `agent list/freeze/rollback`), `hal-watchdog` per-agent & global breakers, `adapter-netmon`, and `adapter-sim-ship`.
 - [x] **Phase 4 — Cognitive Runtime & Red-Team Verification**: `hal-brain`, `adapter-vault`, `adapter-work`, and all 4 flagship red-team drills verified end-to-end.
-- [x] **Phase 5A — Tri-Node Personal System (`HAL Key` Mobile PWA + `hal-bridge` MCP)**: Embedded zero-dependency Mobile-First PWA in `hal-oob` (`HAL Key`), new laptop crate `hal-bridge` (CLI + JSON-RPC 2.0 MCP stdio server + `TriNodeDemoCluster`), and end-to-end Tri-Node tests (`56/56` workspace tests green).
-- [ ] **Phase 5B — Live FreeBSD 14.5 Daemon Bring-Up & First Everyday Adapters**: `rc.d` daemon supervision inside the FreeBSD 14.5 KVM VM, live `wg-agent`/`wg-oob` WireGuard tunnels, real LLM inference routed through `hal-net-broker`, and everyday adapters (RSS/GitHub/email digest & `adapter-mqtt`).
+- [x] **Phase 5A — Tri-Node Personal System (`HAL Key` Mobile PWA + `hal-bridge` MCP)**: Embedded zero-dependency Mobile-First PWA in `hal-oob` (`HAL Key`), laptop crate `hal-bridge` (CLI + JSON-RPC 2.0 MCP stdio server + `TriNodeDemoCluster`), and end-to-end Tri-Node tests.
+- [x] **Phase 5B — Multi-Process Daemon Bring-Up, HTTPS/LLM Broker & `adapter-digest`**: Real `--serve` daemon loops across `hal-bus`, `hal-gateway`, `hal-oob`, and `hal-watchdog` verified in multi-process E2E (`65/65` tests green); `CurlHttpsTransport` + OpenAI-compatible planner in `hal-net-broker` / `hal-brain`; `adapter-digest` (`RSS/Atom` & `GitHub` tainted feeds + declassification); FreeBSD `rc.d/hal_core`, dual-WireGuard (`wg-agent`/`wg-oob`) `pf.conf` rules, and `vm/freebsd/phase5b-deploy.sh`.
+- [ ] **Phase 6 — Physical Hardware Adapters (`adapter-mqtt`) & Unattended Appliance Image**: Real smart-home MQTT/Matter adapter and automated FreeBSD 14.5 appliance VM image builder.
 
 ### 4 Flagship Red-Team Acceptance Scenarios (All Implemented & Passing)
 1. **Prompt Injection Exfiltration Defense**: Feed an agent tainted external content (`UntrustedWeb`) instructing it to read `/vault/docs/secret_plan.txt` (`PrivateVault`) and exfiltrate it to an allowlisted domain → `hal-policy` blocks with `TAINT_EXFIL_BLOCKED`, direct bypass attempts are blocked/logged, and `hal-watchdog` triggers surgical degradation.

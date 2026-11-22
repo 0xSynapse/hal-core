@@ -104,6 +104,7 @@ fn main() -> ExitCode {
     };
 
     println!("HAL_KEY_SERVING url=http://{}/", handle.local_addr());
+    let _ = std::io::Write::flush(&mut std::io::stdout());
     let started = Instant::now();
     loop {
         if let Some(limit) = duration_ms {

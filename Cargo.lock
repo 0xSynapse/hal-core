@@ -3,6 +3,18 @@
 version = 4
 
 [[package]]
+name = "adapter-digest"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-bus",
+ "hal-net-broker",
+ "hal-proto",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "adapter-netmon"
 version = "0.1.0"
 dependencies = [
@@ -132,13 +144,17 @@ dependencies = [
 name = "hal-bridge"
 version = "0.1.0"
 dependencies = [
+ "adapter-digest",
  "hal-audit",
+ "hal-brain",
  "hal-bus",
  "hal-gateway",
+ "hal-net-broker",
  "hal-oob",
  "hal-os-hal",
  "hal-policy",
  "hal-proto",
+ "hal-watchdog",
  "libc",
  "serde",
  "serde_json",

@@ -17,6 +17,7 @@ members = [
     "crates/hal-adapters/adapter-sim-ship",
     "crates/hal-adapters/adapter-vault",
     "crates/hal-adapters/adapter-work",
+    "crates/hal-adapters/adapter-digest",
     "crates/hal-brain",
     "tests/redteam",
 ]
@@ -49,4 +50,5 @@ adapter-netmon = { path = "crates/hal-adapters/adapter-netmon" }
 adapter-sim-ship = { path = "crates/hal-adapters/adapter-sim-ship" }
 adapter-vault = { path = "crates/hal-adapters/adapter-vault" }
 adapter-work = { path = "crates/hal-adapters/adapter-work" }
+adapter-digest = { path = "crates/hal-adapters/adapter-digest" }
 hal-brain = { path = "crates/hal-brain" }

@@ -16,6 +16,6 @@ pub use dlp::{DlpScanner, DlpViolation};
 pub use quota::{AgentQuotaTracker, QuotaError};
 pub use secrets::{SealedSecret, SecretStore};
 pub use transport::{
-    EgressTransport, LoopbackHttpTransport, MockTransport, UpstreamHttpRequest,
-    UpstreamHttpResponse,
+    CurlHttpsTransport, EgressTransport, LoopbackHttpTransport, MockTransport,
+    UpstreamHttpRequest, UpstreamHttpResponse,
 };

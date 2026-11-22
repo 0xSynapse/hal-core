@@ -1,0 +1,73 @@
+# Production Example: Zero-Trust Brokered Egress Allowlist (/usr/local/etc/hal-os/egress-allowlist.toml)
+# Only user _hal_broker is permitted outbound on wan0. Secrets are injected at TLS boundary
+# inside hal-net-broker from 0600 secrets.env; cognitive agents never hold API keys.
+
+version = 1
+default_policy = "deny"
+
+[quotas]
+max_requests_per_min = 40
+max_egress_bytes = 2097152
+max_ingress_bytes = 8388608
+
+[dlp]
+min_entropy_len = 24
+shannon_entropy_threshold = 4.3
+blocked_literals = ["VAULT_SECRET_CANARY"]
+
+[[allow]]
+service_id = "openai_llm"
+host = "api.openai.com"
+port = 443
+methods = ["POST"]
+path_prefixes = ["/v1/chat/completions", "/v1/responses"]
+allowed_agents = ["agent-coder", "agent-netsec", "agent-habitat", "agent-research"]
+secret_ref = "openai_api_key"
+max_request_bytes = 524288
+max_response_bytes = 2097152
+require_tls = true
+
+[[allow]]
+service_id = "deepseek_llm"
+host = "api.deepseek.com"
+port = 443
+methods = ["POST"]
+path_prefixes = ["/v1/chat/completions", "/chat/completions"]
+allowed_agents = ["agent-coder", "agent-netsec", "agent-habitat", "agent-research"]
+secret_ref = "deepseek_api_key"
+max_request_bytes = 524288
+max_response_bytes = 2097152
+require_tls = true
+
+[[allow]]
+service_id = "local_ollama"
+host = "127.0.0.1"
+port = 11434
+methods = ["POST"]
+path_prefixes = ["/v1/chat/completions", "/api/chat"]
+allowed_agents = ["agent-coder", "agent-netsec", "agent-habitat", "agent-research", "agent-vault"]
+max_request_bytes = 1048576
+max_response_bytes = 4194304
+require_tls = false
+
+[[allow]]
+service_id = "arxiv_rss"
+host = "export.arxiv.org"
+port = 443
+methods = ["GET"]
+path_prefixes = ["/rss/", "/api/query"]
+allowed_agents = ["agent-research"]
+max_request_bytes = 4096
+max_response_bytes = 2097152
+require_tls = true
+
+[[allow]]
+service_id = "github_public_ro"
+host = "api.github.com"
+port = 443
+methods = ["GET"]
+path_prefixes = ["/repos/", "/users/"]
+allowed_agents = ["agent-research", "agent-coder"]
+max_request_bytes = 4096
+max_response_bytes = 2097152
+require_tls = true

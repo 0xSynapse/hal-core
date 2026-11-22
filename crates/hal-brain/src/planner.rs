@@ -31,6 +31,41 @@ pub enum PlannedStep {
     },
 }
 
+/// Configuration for calling an OpenAI-compatible Chat Completions endpoint via `hal-net-broker`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlmPlanConfig {
+    pub service_id: String,
+    pub model: String,
+    pub path: String,
+    pub system_prompt: String,
+}
+
+impl Default for LlmPlanConfig {
+    fn default() -> Self {
+        Self {
+            service_id: "deepseek_llm".to_string(),
+            model: "deepseek-chat".to_string(),
+            path: "/v1/chat/completions".to_string(),
+            system_prompt: "Respond strictly with a JSON array of PlannedStep objects (ProposeAction, SendIpc, or RecordMemory).".to_string(),
+        }
+    }
+}
+
+/// Extracts a raw JSON array payload from plain text or optional Markdown ```json code fences.
+#[must_use]
+pub fn extract_json_array_payload(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    if let Some(after_open) = trimmed.strip_prefix("```") {
+        let body = after_open
+            .split_once('\n')
+            .map_or(after_open, |(_, rest)| rest);
+        if let Some(before_close) = body.trim_end().strip_suffix("```") {
+            return before_close.trim();
+        }
+    }
+    trimmed
+}
+
 /// Secretless LLM inference client routing all prompts strictly through `hal-net-broker`.
 pub struct BrokeredLlmClient;
 
@@ -57,14 +92,49 @@ impl BrokeredLlmClient {
             body,
         };
         let resp = broker.execute(principal, episode_id, episode_taints, &req, now_ms)?;
-        let parsed: Value = serde_json::from_str(&resp.body)?;
+        Self::parse_chat_completions(&resp.body, resp.taint_tags)
+    }
+
+    pub fn plan_openai_compatible<T: EgressTransport>(
+        broker: &mut NetBroker<T>,
+        principal: &AgentPrincipal,
+        episode_id: &str,
+        episode_taints: &BTreeSet<TaintTag>,
+        cfg: &LlmPlanConfig,
+        user_prompt: &str,
+        now_ms: u64,
+    ) -> Result<(Vec<PlannedStep>, BTreeSet<TaintTag>), BrainError> {
+        let body = serde_json::to_vec(&json!({
+            "model": cfg.model,
+            "temperature": 0,
+            "messages": [
+                { "role": "system", "content": cfg.system_prompt },
+                { "role": "user", "content": user_prompt }
+            ]
+        }))?;
+        let req = EgressRequest {
+            service_id: cfg.service_id.clone(),
+            method: "POST".to_string(),
+            path: cfg.path.clone(),
+            headers: vec![("Content-Type".to_string(), "application/json".to_string())],
+            body,
+        };
+        let resp = broker.execute(principal, episode_id, episode_taints, &req, now_ms)?;
+        Self::parse_chat_completions(&resp.body, resp.taint_tags)
+    }
+
+    fn parse_chat_completions(
+        body: &str,
+        taints: BTreeSet<TaintTag>,
+    ) -> Result<(Vec<PlannedStep>, BTreeSet<TaintTag>), BrainError> {
+        let parsed: Value = serde_json::from_str(body)?;
         let content = parsed["choices"][0]["message"]["content"]
             .as_str()
             .ok_or_else(|| {
                 BrainError::Parse("LLM response missing choices[0].message.content".to_string())
             })?;
-        let steps: Vec<PlannedStep> = serde_json::from_str(content)?;
-        Ok((steps, resp.taint_tags))
+        let steps: Vec<PlannedStep> = serde_json::from_str(extract_json_array_payload(content))?;
+        Ok((steps, taints))
     }
 }
 
@@ -284,4 +354,109 @@ fn handle_llm_conn(
     let _ = stream.write_all(&frame);
     let _ = stream.flush();
     let _ = stream.shutdown(Shutdown::Write);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hal_audit::AuditLog;
+    use hal_net_broker::{EgressAllowlist, MockTransport, SealedSecret, SecretStore};
+    use hal_proto::{AgentAuthKind, TrustDomain};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn openai_compatible_planner_parses_fenced_steps_injects_secret_and_taints_untrusted() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let audit_path = std::env::temp_dir().join(format!(
+            "hal_planner_openai_{}_{}.jsonl",
+            std::process::id(),
+            nanos % 1_000_000_000
+        ));
+        let allowlist = EgressAllowlist::from_toml_str(
+            r#"
+version = 1
+default_policy = "deny"
+[quotas]
+max_requests_per_min = 30
+max_egress_bytes = 65536
+max_ingress_bytes = 65536
+[dlp]
+min_entropy_len = 24
+shannon_entropy_threshold = 4.3
+[[allow]]
+service_id = "deepseek_llm"
+host = "api.deepseek.com"
+port = 443
+methods = ["POST"]
+path_prefixes = ["/v1/chat/completions"]
+allowed_agents = ["agent-research"]
+secret_ref = "deepseek_api_key"
+max_request_bytes = 32768
+max_response_bytes = 32768
+require_tls = true
+"#,
+        )
+        .unwrap();
+        let mut secrets = SecretStore::default();
+        secrets.insert(
+            "deepseek_api_key",
+            SealedSecret::new("Authorization", "Bearer ", "sk-deepseek-unit-secret-01"),
+        );
+
+        let content_fenced = "```json\n[{\"type\":\"RecordMemory\",\"summary\":\"summarized_feed\"}]\n```";
+        let mock = MockTransport {
+            status: 200,
+            body: serde_json::to_vec(&json!({
+                "choices": [{
+                    "index": 0,
+                    "message": { "role": "assistant", "content": content_fenced }
+                }]
+            }))
+            .unwrap(),
+            ..Default::default()
+        };
+        let audit = AuditLog::open(&audit_path).unwrap();
+        let mut broker = NetBroker::new(allowlist, secrets, mock, audit);
+        let principal = AgentPrincipal {
+            agent_id: "agent-research".into(),
+            trust_domain: TrustDomain::UntrustedResearch,
+            auth_kind: AgentAuthKind::LocalNoIpJail,
+            parent_agent_id: None,
+            peer_cred_or_cert_fp: "uid:1005".into(),
+        };
+
+        let (steps, tags) = BrokeredLlmClient::plan_openai_compatible(
+            &mut broker,
+            &principal,
+            "ep_oa_1",
+            &BTreeSet::new(),
+            &LlmPlanConfig::default(),
+            "Summarize recent systems preprints",
+            5_000,
+        )
+        .unwrap();
+        assert_eq!(
+            steps,
+            vec![PlannedStep::RecordMemory {
+                summary: "summarized_feed".to_string()
+            }]
+        );
+        assert!(tags.contains(&TaintTag::UntrustedWeb));
+
+        let sent = broker.transport().sent.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].host, "api.deepseek.com");
+        assert!(sent[0]
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Authorization" && v == "Bearer sk-deepseek-unit-secret-01"));
+        let sent_json: Value = serde_json::from_slice(&sent[0].body).unwrap();
+        assert_eq!(sent_json["model"], "deepseek-chat");
+        assert_eq!(sent_json["messages"].as_array().unwrap().len(), 2);
+        drop(sent);
+        let _ = std::fs::remove_file(audit_path);
+    }
 }

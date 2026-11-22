@@ -1,0 +1,119 @@
+#!/bin/sh
+# FreeBSD rc.d supervision script for HAL Core & HAL Key brainstem services.
+# Install to /usr/local/etc/rc.d/hal_core (chmod 0555).
+
+# PROVIDE: hal_core
+# REQUIRE: NETWORKING zfs pflog
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="hal_core"
+rcvar="hal_core_enable"
+
+load_rc_config "$name"
+
+: "${hal_core_enable:=NO}"
+: "${hal_core_conf_dir:=/usr/local/etc/hal-os}"
+: "${hal_core_secrets_file:=/usr/local/etc/hal-os/secrets.env}"
+: "${hal_core_socket_dir:=/var/run/hal/bus}"
+: "${hal_core_audit_log:=/pool/audit/hal-audit.log}"
+: "${hal_core_gw_audit_log:=/pool/audit/hal-gateway.jsonl}"
+: "${hal_core_gw_bind:=10.99.0.1:9443}"
+: "${hal_core_oob_bind:=192.168.100.10:8443}"
+: "${hal_core_pid_dir:=/var/run/hal}"
+
+start_cmd="hal_core_start"
+stop_cmd="hal_core_stop"
+status_cmd="hal_core_status"
+
+hal_core_require_secrets()
+{
+    if [ ! -f "$hal_core_secrets_file" ]; then
+        echo "hal_core: missing secrets file '$hal_core_secrets_file'" >&2
+        return 1
+    fi
+    perm_str="$(ls -ld "$hal_core_secrets_file" | awk '{print $1}')"
+    case "$perm_str" in
+        -??-------*) ;;
+        *)
+            echo "hal_core: secrets file '$hal_core_secrets_file' must not be group/other readable (got $perm_str; run chmod 0600)" >&2
+            return 1
+            ;;
+    esac
+    set -a
+    # shellcheck disable=SC1090
+    . "$hal_core_secrets_file"
+    set +a
+}
+
+hal_core_start()
+{
+    hal_core_require_secrets || return 1
+    mkdir -p "$hal_core_pid_dir" "$hal_core_socket_dir" "$(dirname "$hal_core_audit_log")"
+
+    /usr/sbin/daemon -f -p "$hal_core_pid_dir/hal-bus.pid" \
+        /usr/local/bin/hal-bus \
+        --ipc-matrix "$hal_core_conf_dir/ipc-matrix.toml" \
+        --audit-log "$hal_core_audit_log" \
+        --socket-dir "$hal_core_socket_dir" \
+        --token-secret-env HAL_TOKEN_SECRET \
+        --serve
+
+    sleep 1
+
+    /usr/sbin/daemon -f -p "$hal_core_pid_dir/hal-gateway.pid" \
+        /usr/local/bin/hal-gateway \
+        --config "$hal_core_conf_dir/gateway-peers.toml" \
+        --bind "$hal_core_gw_bind" \
+        --bus-socket "$hal_core_socket_dir/gateway.sock" \
+        --audit-log "$hal_core_gw_audit_log" \
+        --token-secret-env HAL_TOKEN_SECRET \
+        --peer-key-env remote-laptop-01=HAL_PEER_KEY_LAPTOP \
+        --serve
+
+    /usr/sbin/daemon -f -p "$hal_core_pid_dir/hal-oob.pid" \
+        /usr/local/bin/hal-oob \
+        --bind "$hal_core_oob_bind" \
+        --bus-socket "$hal_core_socket_dir/oob.sock" \
+        --audit-log "$hal_core_audit_log" \
+        --serve
+
+    /usr/sbin/daemon -f -p "$hal_core_pid_dir/hal-watchdog.pid" \
+        /usr/local/bin/hal-watchdog \
+        --config "$hal_core_conf_dir/watchdog.toml" \
+        --audit-log "$hal_core_audit_log" \
+        --bus-socket "$hal_core_socket_dir/watchdog.sock" \
+        --serve
+
+    echo "hal_core started (hal-bus, hal-gateway, hal-oob/HAL Key, hal-watchdog)"
+}
+
+hal_core_stop()
+{
+    for svc in hal-watchdog hal-oob hal-gateway hal-bus; do
+        pidfile="$hal_core_pid_dir/${svc}.pid"
+        if [ -f "$pidfile" ]; then
+            pid="$(cat "$pidfile")"
+            if kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" || true
+            fi
+            rm -f "$pidfile"
+        fi
+    done
+    echo "hal_core stopped"
+}
+
+hal_core_status()
+{
+    for svc in hal-bus hal-gateway hal-oob hal-watchdog; do
+        pidfile="$hal_core_pid_dir/${svc}.pid"
+        if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+            echo "$svc: running (pid $(cat "$pidfile"))"
+        else
+            echo "$svc: stopped"
+        fi
+    done
+}
+
+run_rc_command "$1"
