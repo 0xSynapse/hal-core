@@ -1,0 +1,21 @@
+# HAL-OS Default-Deny Remote Agent Gateway Policy (/usr/local/etc/hal-os/gateway-peers.toml)
+# Only explicitly allowed remote clients with valid mTLS cert fingerprint + allowed source CIDR
+# and cert-proof challenge may register via hal-gateway as TrustDomain::RemoteExternal.
+
+version = 1
+default_policy = "deny"
+require_cert_proof = true
+
+[[peers]]
+agent_id = "remote-laptop-01"
+cert_sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+allowed_cidrs = ["10.99.0.0/24", "127.0.0.1/32"]
+max_risk_tier = "L2"
+enabled = true
+
+[[peers]]
+agent_id = "remote-guest-ro"
+cert_sha256 = "2222222222222222222222222222222222222222222222222222222222222222"
+allowed_cidrs = ["10.99.0.0/24", "127.0.0.1/32"]
+max_risk_tier = "L0"
+enabled = true

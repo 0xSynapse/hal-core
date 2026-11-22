@@ -1,0 +1,31 @@
+[package]
+name = "hal-oob"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hal-oob"
+path = "src/main.rs"
+
+[[bin]]
+name = "halctl"
+path = "src/bin/halctl.rs"
+
+[dependencies]
+hal-proto.workspace = true
+hal-audit.workspace = true
+hal-bus.workspace = true
+hal-os-hal.workspace = true
+hal-workspace.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+hal-gateway.workspace = true
+hal-watchdog.workspace = true
+adapter-netmon.workspace = true
+adapter-sim-ship.workspace = true
+hal-policy.workspace = true
+hal-sandbox.workspace = true
+libc.workspace = true

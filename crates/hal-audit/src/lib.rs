@@ -157,12 +157,35 @@ impl AuditLog {
 
 /// Verifies every record sequence number, `prev_hash` pointer, and SHA-256 `entry_hash` in `path`.
 pub fn verify_file(path: impl AsRef<Path>) -> Result<VerifyReport, AuditError> {
-    let file = File::open(path.as_ref())?;
+    let (report, _) = verify_and_collect(path.as_ref(), None)?;
+    Ok(report)
+}
+
+/// Verifies the full audit chain in `path` and returns records with `seq > after_seq`.
+/// Returns an empty vector if `path` does not exist yet.
+pub fn read_records_from_seq(
+    path: impl AsRef<Path>,
+    after_seq: u64,
+) -> Result<Vec<AuditRecord>, AuditError> {
+    let path = path.as_ref();
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let (_, records) = verify_and_collect(path, Some(after_seq))?;
+    Ok(records)
+}
+
+fn verify_and_collect(
+    path: &Path,
+    collect_after_seq: Option<u64>,
+) -> Result<(VerifyReport, Vec<AuditRecord>), AuditError> {
+    let file = File::open(path)?;
     let reader = BufReader::new(file);
 
     let mut expected_seq = 1u64;
     let mut expected_prev_hash = GENESIS_PREV_HASH.to_string();
     let mut record_count = 0u64;
+    let mut collected = Vec::new();
 
     for (idx, line_res) in reader.lines().enumerate() {
         let line_no = idx + 1;
@@ -208,16 +231,24 @@ pub fn verify_file(path: impl AsRef<Path>) -> Result<VerifyReport, AuditError> {
             });
         }
 
-        expected_prev_hash = record.entry_hash;
+        expected_prev_hash = record.entry_hash.clone();
+        if let Some(after_seq) = collect_after_seq {
+            if record.seq > after_seq {
+                collected.push(record);
+            }
+        }
         expected_seq += 1;
         record_count += 1;
     }
 
-    Ok(VerifyReport {
-        record_count,
-        head_seq: record_count,
-        head_hash: expected_prev_hash,
-    })
+    Ok((
+        VerifyReport {
+            record_count,
+            head_seq: record_count,
+            head_hash: expected_prev_hash,
+        },
+        collected,
+    ))
 }
 
 #[cfg(test)]
@@ -287,6 +318,14 @@ mod tests {
         assert_eq!(report.record_count, 3);
         assert_eq!(report.head_seq, 3);
         assert_eq!(report.head_hash, head_hash_after_3);
+
+        let all = read_records_from_seq(&path, 0).unwrap();
+        assert_eq!(all.len(), 3);
+        let tail = read_records_from_seq(&path, 2).unwrap();
+        assert_eq!(tail.len(), 1);
+        assert_eq!(tail[0].seq, 3);
+        let missing = unique_tmp_file("missing");
+        assert!(read_records_from_seq(&missing, 0).unwrap().is_empty());
 
         let original = std::fs::read_to_string(&path).unwrap();
         let mutated = original.replacen("\"write\"", "\"Write\"", 1);

@@ -1,7 +1,7 @@
 use crate::token::DelegationSpec;
 use crate::types::{
-    ActionProposal, AgentPrincipal, CapabilityToken, EventEnvelope, IpcMessage, PolicyDecision,
-    ResourceLease, SystemMode, TaintTag,
+    ActionProposal, AgentPrincipal, AgentStatusEntry, CapabilityToken, EventEnvelope, IpcMessage,
+    PendingApproval, PolicyDecision, ResourceLease, SystemMode, TaintTag,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -68,6 +68,34 @@ pub enum BusRequest {
         agent_id: String,
         episode_id: String,
     },
+    ListAgents,
+    ListPendingApprovals,
+    ResolveApproval {
+        approval_id: String,
+        approve: bool,
+        note: String,
+        now_ms: u64,
+    },
+    RevokeAgent {
+        target_agent_id: String,
+        reason: String,
+    },
+    GatewaySubmitProposal {
+        remote_principal: AgentPrincipal,
+        proposal: ActionProposal,
+        now_ms: u64,
+    },
+    GatewaySendIpc {
+        remote_principal: AgentPrincipal,
+        message: IpcMessage,
+        from_episode_id: String,
+        to_episode_id: String,
+    },
+    GatewayPublishEvent {
+        remote_principal: AgentPrincipal,
+        event: EventEnvelope,
+        episode_id: String,
+    },
 }
 
 /// Responses returned by `hal-bus` over Unix Domain Sockets.
@@ -125,6 +153,20 @@ pub enum BusResponse {
         agent_id: String,
         episode_id: String,
         taints: BTreeSet<TaintTag>,
+    },
+    AgentList {
+        agents: Vec<AgentStatusEntry>,
+        system_mode: SystemMode,
+    },
+    PendingApprovals {
+        approvals: Vec<PendingApproval>,
+    },
+    ApprovalResolved {
+        approval: Box<PendingApproval>,
+    },
+    AgentRevoked {
+        agent_id: String,
+        reason: String,
     },
     Error {
         code: String,

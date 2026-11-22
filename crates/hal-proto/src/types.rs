@@ -132,6 +132,32 @@ impl SystemMode {
     }
 }
 
+impl fmt::Display for SystemMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Autonomous => "autonomous",
+            Self::Advisory => "advisory",
+            Self::Frozen => "frozen",
+            Self::Lockdown => "lockdown",
+        };
+        f.write_str(s)
+    }
+}
+
+impl FromStr for SystemMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "autonomous" => Ok(Self::Autonomous),
+            "advisory" => Ok(Self::Advisory),
+            "frozen" => Ok(Self::Frozen),
+            "lockdown" => Ok(Self::Lockdown),
+            other => Err(format!("unknown system mode '{other}'")),
+        }
+    }
+}
+
 /// Plan 9-style Habitat node kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeKind {
@@ -269,4 +295,35 @@ pub struct DualSnapshot {
     pub memory_dataset: String,
     pub created_at_ms: u64,
     pub reason: String,
+}
+
+/// Resolution status of an L2 proposal queued for human OOB approval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApprovalStatus {
+    Pending,
+    Approved,
+    Rejected,
+}
+
+/// Queued L2 proposal tracked by `hal-bus` and resolved via `hal-oob` / `halctl`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PendingApproval {
+    pub approval_id: String,
+    pub proposal: ActionProposal,
+    pub principal: AgentPrincipal,
+    pub risk_tier: RiskTier,
+    pub summary: String,
+    pub diff_preview: Option<String>,
+    pub created_at_ms: u64,
+    pub status: ApprovalStatus,
+    pub resolved_by: Option<String>,
+    pub resolved_at_ms: Option<u64>,
+    pub resolution_note: Option<String>,
+}
+
+/// Registered agent principal paired with its current freeze status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentStatusEntry {
+    pub principal: AgentPrincipal,
+    pub frozen_reason: Option<String>,
 }

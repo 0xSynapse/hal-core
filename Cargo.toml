@@ -9,6 +9,11 @@ members = [
     "crates/hal-net-broker",
     "crates/hal-workspace",
     "crates/hal-sandbox",
+    "crates/hal-gateway",
+    "crates/hal-oob",
+    "crates/hal-watchdog",
+    "crates/hal-adapters/adapter-netmon",
+    "crates/hal-adapters/adapter-sim-ship",
 ]
 
 [workspace.package]
@@ -31,3 +36,8 @@ hal-bus = { path = "crates/hal-bus" }
 hal-net-broker = { path = "crates/hal-net-broker" }
 hal-workspace = { path = "crates/hal-workspace" }
 hal-sandbox = { path = "crates/hal-sandbox" }
+hal-gateway = { path = "crates/hal-gateway" }
+hal-oob = { path = "crates/hal-oob" }
+hal-watchdog = { path = "crates/hal-watchdog" }
+adapter-netmon = { path = "crates/hal-adapters/adapter-netmon" }
+adapter-sim-ship = { path = "crates/hal-adapters/adapter-sim-ship" }

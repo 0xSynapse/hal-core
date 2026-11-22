@@ -1,0 +1,12 @@
+# HAL-OS Deterministic Watchdog Thresholds (/usr/local/etc/hal-os/watchdog.toml)
+# Zero-AI anomaly detector enforcing surgical per-agent freeze and unidirectional global degradation.
+
+version = 1
+denial_burst_threshold = 3
+denial_window_ms = 60000
+lease_conflict_threshold = 3
+lease_window_ms = 30000
+pf_drop_burst_threshold = 5
+pf_window_ms = 30000
+global_escalate_frozen_agents = 2
+sensor_divergence_limit_c = 5.0

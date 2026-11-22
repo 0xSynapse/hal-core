@@ -88,6 +88,7 @@ fn spawn_test_bus(dir: &Path, matrix: IpcMatrix) -> (hal_bus::BusServerHandle, P
                 expected_uid: Some(euid),
                 is_oob: false,
                 is_watchdog: false,
+                is_gateway: false,
             },
         ),
         (
@@ -97,6 +98,7 @@ fn spawn_test_bus(dir: &Path, matrix: IpcMatrix) -> (hal_bus::BusServerHandle, P
                 expected_uid: Some(euid),
                 is_oob: false,
                 is_watchdog: false,
+                is_gateway: false,
             },
         ),
         (
@@ -106,6 +108,7 @@ fn spawn_test_bus(dir: &Path, matrix: IpcMatrix) -> (hal_bus::BusServerHandle, P
                 expected_uid: Some(euid),
                 is_oob: false,
                 is_watchdog: false,
+                is_gateway: false,
             },
         ),
         (
@@ -115,6 +118,7 @@ fn spawn_test_bus(dir: &Path, matrix: IpcMatrix) -> (hal_bus::BusServerHandle, P
                 expected_uid: Some(euid),
                 is_oob: false,
                 is_watchdog: false,
+                is_gateway: false,
             },
         ),
         (
@@ -124,6 +128,7 @@ fn spawn_test_bus(dir: &Path, matrix: IpcMatrix) -> (hal_bus::BusServerHandle, P
                 expected_uid: Some(euid),
                 is_oob: false,
                 is_watchdog: true,
+                is_gateway: false,
             },
         ),
         (
@@ -133,6 +138,7 @@ fn spawn_test_bus(dir: &Path, matrix: IpcMatrix) -> (hal_bus::BusServerHandle, P
                 expected_uid: Some(euid),
                 is_oob: true,
                 is_watchdog: false,
+                is_gateway: false,
             },
         ),
     ];

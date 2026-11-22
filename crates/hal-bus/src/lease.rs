@@ -121,6 +121,23 @@ impl LeaseArbiter {
         self.leases.get(resource_path).map(|h| h.lease.clone())
     }
 
+    /// Revokes all non-OOB active leases held by `agent_id` and returns removed `lease_id`s.
+    pub fn revoke_holder_leases(&mut self, agent_id: &str) -> Vec<String> {
+        let mut keys_to_remove = Vec::new();
+        let mut lease_ids = Vec::new();
+        for (path, held) in &self.leases {
+            if !held.holder_is_oob && held.lease.holder_agent_id == agent_id {
+                keys_to_remove.push(path.clone());
+                lease_ids.push(held.lease.lease_id.clone());
+            }
+        }
+        for key in keys_to_remove {
+            self.leases.remove(&key);
+        }
+        lease_ids.sort();
+        lease_ids
+    }
+
     fn purge_expired(&mut self, resource_path: &str, now_ms: u64) {
         if let Some(current) = self.leases.get(resource_path) {
             if current.lease.expires_at_ms <= now_ms {

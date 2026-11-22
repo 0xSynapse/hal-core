@@ -8,6 +8,7 @@ pub struct EndpointBinding {
     pub expected_uid: Option<u32>,
     pub is_oob: bool,
     pub is_watchdog: bool,
+    pub is_gateway: bool,
 }
 
 /// Active registry of authenticated HAL-OS agents.
