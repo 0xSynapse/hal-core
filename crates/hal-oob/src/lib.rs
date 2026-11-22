@@ -3,6 +3,7 @@
 
 pub mod console;
 pub mod http;
+pub mod pwa;
 pub mod service;
 
 pub use console::handle_oob_console_line;

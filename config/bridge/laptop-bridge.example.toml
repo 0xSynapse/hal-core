@@ -1,0 +1,14 @@
+# Sample laptop-side hal-bridge configuration connecting an Aegis OS coding agent
+# (such as Claude Code, Codex, or Antigravity) to HAL Core via WireGuard (`wg-agent`).
+#
+# Usage:
+#   export HAL_BRIDGE_PROOF_KEY="<shared-or-mtls-derived-proof-key>"
+#   hal-bridge --config config/bridge/laptop-bridge.example.toml mcp
+
+version = 1
+gateway_addr = "10.99.0.1:9443"
+agent_id = "remote-laptop-01"
+cert_sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+peer_proof_key_env = "HAL_BRIDGE_PROOF_KEY"
+cap_token_path = "./remote-laptop-01.cap.json"
+default_episode_id = "laptop-aegis-session"

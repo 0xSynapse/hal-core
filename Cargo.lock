@@ -129,6 +129,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "hal-bridge"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-bus",
+ "hal-gateway",
+ "hal-oob",
+ "hal-os-hal",
+ "hal-policy",
+ "hal-proto",
+ "libc",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "hal-bus"
 version = "0.1.0"
 dependencies = [

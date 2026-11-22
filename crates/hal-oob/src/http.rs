@@ -1,3 +1,4 @@
+use crate::pwa::{HAL_KEY_ICON_SVG, HAL_KEY_INDEX_HTML, HAL_KEY_MANIFEST_JSON};
 use crate::service::{OobController, OobError};
 use hal_proto::SystemMode;
 use serde_json::{json, Value};
@@ -149,18 +150,88 @@ fn read_http_request(
     }))
 }
 
-fn send_http_json(stream: &mut TcpStream, status_code: u16, status_text: &str, payload: &Value) {
-    let body = serde_json::to_vec(payload).unwrap_or_else(|_| b"{}".to_vec());
-    let header = format!(
-        "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+const HTML_CSP: &str = "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+
+fn send_http_bytes(
+    stream: &mut TcpStream,
+    status_code: u16,
+    status_text: &str,
+    content_type: &str,
+    extra_headers: &[(&str, &str)],
+    body: &[u8],
+) {
+    let mut header = format!(
+        "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nCache-Control: no-store\r\n",
         body.len()
     );
+    for &(k, v) in extra_headers {
+        header.push_str(&format!("{k}: {v}\r\n"));
+    }
+    header.push_str("Connection: close\r\n\r\n");
     let mut frame = Vec::with_capacity(header.len() + body.len());
     frame.extend_from_slice(header.as_bytes());
-    frame.extend_from_slice(&body);
+    frame.extend_from_slice(body);
     let _ = stream.write_all(&frame);
     let _ = stream.flush();
     let _ = stream.shutdown(Shutdown::Write);
+}
+
+fn send_http_json(stream: &mut TcpStream, status_code: u16, status_text: &str, payload: &Value) {
+    let body = serde_json::to_vec(payload).unwrap_or_else(|_| b"{}".to_vec());
+    send_http_bytes(
+        stream,
+        status_code,
+        status_text,
+        "application/json",
+        &[],
+        &body,
+    );
+}
+
+fn try_serve_static_pwa(stream: &mut TcpStream, req: &ParsedHttpRequest) -> bool {
+    if req.method != "GET" {
+        return false;
+    }
+    let path = req
+        .target
+        .split_once('?')
+        .map_or(req.target.as_str(), |(p, _)| p);
+    match path {
+        "/" | "/index.html" => {
+            send_http_bytes(
+                stream,
+                200,
+                "OK",
+                "text/html; charset=utf-8",
+                &[("Content-Security-Policy", HTML_CSP)],
+                HAL_KEY_INDEX_HTML.as_bytes(),
+            );
+            true
+        }
+        "/manifest.json" => {
+            send_http_bytes(
+                stream,
+                200,
+                "OK",
+                "application/manifest+json; charset=utf-8",
+                &[],
+                HAL_KEY_MANIFEST_JSON.as_bytes(),
+            );
+            true
+        }
+        "/icon.svg" => {
+            send_http_bytes(
+                stream,
+                200,
+                "OK",
+                "image/svg+xml; charset=utf-8",
+                &[],
+                HAL_KEY_ICON_SVG.as_bytes(),
+            );
+            true
+        }
+        _ => false,
+    }
 }
 
 fn error_status_for_oob(err: &OobError) -> (u16, &'static str, String, String) {
@@ -422,6 +493,9 @@ impl OobHttpServer {
                             let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
                             match read_http_request(&mut stream, &sd_conn) {
                                 Ok(Some(req)) => {
+                                    if try_serve_static_pwa(&mut stream, &req) {
+                                        return;
+                                    }
                                     let supplied = req
                                         .headers
                                         .get("x-hal-oob-token")
@@ -489,33 +563,44 @@ impl OobHttpClient {
         }
     }
 
-    pub fn request(
+    pub fn request_raw(
         &self,
         method: &str,
         path: &str,
-        body: Option<&Value>,
-    ) -> io::Result<(u16, Value)> {
+        include_token: bool,
+    ) -> io::Result<(u16, HashMap<String, String>, Vec<u8>)> {
+        self.send_raw(method, path, None, include_token)
+    }
+
+    fn send_raw(
+        &self,
+        method: &str,
+        path: &str,
+        body_bytes: Option<&[u8]>,
+        include_token: bool,
+    ) -> io::Result<(u16, HashMap<String, String>, Vec<u8>)> {
         let mut stream = TcpStream::connect(self.addr)?;
-        let body_bytes = match body {
-            Some(v) => serde_json::to_vec(v)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?,
-            None => Vec::new(),
-        };
-        let mut req = format!(
-            "{method} {path} HTTP/1.1\r\nHost: {}\r\nX-Hal-Oob-Token: {}\r\nConnection: close\r\n",
-            self.addr, self.auth_token
-        );
-        if body.is_some() || !body_bytes.is_empty() {
-            req.push_str(&format!(
-                "Content-Type: application/json\r\nContent-Length: {}\r\n",
-                body_bytes.len()
-            ));
+        let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {}\r\n", self.addr);
+        if include_token {
+            req.push_str(&format!("X-Hal-Oob-Token: {}\r\n", self.auth_token));
+        }
+        req.push_str("Connection: close\r\n");
+        if let Some(bytes) = body_bytes {
+            if !bytes.is_empty() {
+                req.push_str(&format!(
+                    "Content-Type: application/json\r\nContent-Length: {}\r\n",
+                    bytes.len()
+                ));
+            }
         }
         req.push_str("\r\n");
 
-        let mut frame = Vec::with_capacity(req.len() + body_bytes.len());
+        let extra_len = body_bytes.map_or(0, <[u8]>::len);
+        let mut frame = Vec::with_capacity(req.len() + extra_len);
         frame.extend_from_slice(req.as_bytes());
-        frame.extend_from_slice(&body_bytes);
+        if let Some(bytes) = body_bytes {
+            frame.extend_from_slice(bytes);
+        }
         stream.write_all(&frame)?;
         stream.flush()?;
 
@@ -527,16 +612,34 @@ impl OobHttpClient {
                 "malformed HTTP response from hal-oob",
             )
         })?;
-        let (start_line, _, _) = parse_headers(&buf[..hend - 4])?;
+        let (start_line, headers, _) = parse_headers(&buf[..hend - 4])?;
         let status_code = start_line
             .split_whitespace()
             .nth(1)
             .and_then(|s| s.parse::<u16>().ok())
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing HTTP status"))?;
-        let json_val: Value = if buf[hend..].is_empty() {
+        Ok((status_code, headers, buf[hend..].to_vec()))
+    }
+
+    pub fn request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&Value>,
+    ) -> io::Result<(u16, Value)> {
+        let body_bytes = match body {
+            Some(v) => Some(
+                serde_json::to_vec(v)
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?,
+            ),
+            None => None,
+        };
+        let (status_code, _, raw_body) =
+            self.send_raw(method, path, body_bytes.as_deref(), true)?;
+        let json_val: Value = if raw_body.is_empty() {
             Value::Null
         } else {
-            serde_json::from_slice(&buf[hend..])
+            serde_json::from_slice(&raw_body)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
         };
         Ok((status_code, json_val))
@@ -631,6 +734,48 @@ mod tests {
         let (st_ok, body) = good_client.request("GET", "/api/v1/status", None).unwrap();
         assert_eq!(st_ok, 200);
         assert_eq!(body["system_mode"], "Autonomous");
+
+        // Embedded HAL Key PWA routes serve without token + include strict security headers
+        let (st_html, hdrs_html, raw_html) = good_client.request_raw("GET", "/", false).unwrap();
+        assert_eq!(st_html, 200);
+        assert!(hdrs_html
+            .get("content-type")
+            .is_some_and(|v| v.contains("text/html")));
+        assert_eq!(
+            hdrs_html.get("x-frame-options").map(String::as_str),
+            Some("DENY")
+        );
+        assert_eq!(
+            hdrs_html.get("x-content-type-options").map(String::as_str),
+            Some("nosniff")
+        );
+        assert!(hdrs_html.contains_key("content-security-policy"));
+        let html_str = String::from_utf8(raw_html).unwrap();
+        assert!(html_str.contains("HAL Key"));
+
+        let (st_mf, hdrs_mf, raw_mf) = good_client
+            .request_raw("GET", "/manifest.json", false)
+            .unwrap();
+        assert_eq!(st_mf, 200);
+        assert!(hdrs_mf
+            .get("content-type")
+            .is_some_and(|v| v.contains("manifest+json")));
+        let mf_json: Value = serde_json::from_slice(&raw_mf).unwrap();
+        assert_eq!(mf_json["short_name"], "HAL Key");
+
+        let (st_svg, hdrs_svg, raw_svg) =
+            good_client.request_raw("GET", "/icon.svg", false).unwrap();
+        assert_eq!(st_svg, 200);
+        assert!(hdrs_svg
+            .get("content-type")
+            .is_some_and(|v| v.contains("image/svg+xml")));
+        assert!(String::from_utf8(raw_svg).unwrap().contains("<svg"));
+
+        // API remains strictly gated even when PWA shell is public on mgmt0/wg-oob
+        let (st_api_no_tok, _, _) = good_client
+            .request_raw("GET", "/api/v1/status", false)
+            .unwrap();
+        assert_eq!(st_api_no_tok, 401);
 
         http.shutdown();
         bus.shutdown();
