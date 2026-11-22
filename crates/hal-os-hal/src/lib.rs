@@ -9,7 +9,7 @@ pub use append_only::{AppendOnlyGuard, MockAppendOnlyGuard, OsAppendOnlyGuard};
 pub use backends::{
     DualSnapshotRequest, FirewallBackend, FreeBsdJailBackend, FreeBsdPfBackend,
     FreeBsdZfsWorkspaceBackend, HalOsError, MockFirewallBackend, MockSandboxBackend,
-    MockWorkspaceBackend, SandboxBackend, WorkspaceBackend,
+    MockWorkspaceBackend, RctlLimits, SandboxBackend, WorkspaceBackend,
 };
 pub use capsicum::{CapsicumGuard, OsCapsicumGuard};
 pub use peercred::{MockPeerCredProvider, OsPeerCredProvider, PeerCred, PeerCredProvider};

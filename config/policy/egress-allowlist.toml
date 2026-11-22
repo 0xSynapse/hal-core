@@ -1,0 +1,52 @@
+# HAL-OS Zero-Trust Brokered Egress Allowlist (/usr/local/etc/hal-os/egress-allowlist.toml)
+# Only user _hal_broker is permitted outbound on wan0; all unlisted hosts/methods/agents
+# are denied by default. Secrets are sealed in hal-net-broker and injected at TLS/wire boundary.
+
+version = 1
+default_policy = "deny"
+
+[quotas]
+max_requests_per_min = 60
+max_egress_bytes = 1048576
+max_ingress_bytes = 4194304
+
+[dlp]
+min_entropy_len = 24
+shannon_entropy_threshold = 4.3
+blocked_literals = ["VAULT_SECRET_CANARY"]
+
+[[allow]]
+service_id = "llm_inference"
+host = "api.example-llm.local"
+port = 443
+methods = ["POST"]
+path_prefixes = ["/v1/chat/completions", "/v1/responses"]
+allowed_agents = ["agent-coder", "agent-netsec", "agent-habitat", "agent-research"]
+secret_ref = "llm_api_key"
+max_request_bytes = 262144
+max_response_bytes = 1048576
+require_tls = true
+
+[[allow]]
+service_id = "ship_status_api"
+host = "status.ship.local"
+port = 443
+methods = ["GET", "POST"]
+path_prefixes = ["/v1/telemetry", "/v1/alerts"]
+allowed_agents = ["agent-habitat", "agent-netsec", "agent-coder"]
+secret_ref = "ship_status_token"
+max_request_bytes = 65536
+max_response_bytes = 262144
+require_tls = true
+
+[[allow]]
+service_id = "github_api"
+host = "api.github.com"
+port = 443
+methods = ["GET", "POST"]
+path_prefixes = ["/repos/", "/user"]
+allowed_agents = ["agent-coder"]
+secret_ref = "github_pat"
+max_request_bytes = 131072
+max_response_bytes = 1048576
+require_tls = true

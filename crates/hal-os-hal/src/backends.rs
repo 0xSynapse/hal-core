@@ -47,8 +47,28 @@ pub struct DualSnapshotRequest<'a> {
     pub now_ms: u64,
 }
 
+/// Hard per-jail RCTL resource limits (`kern.racct.enable="1"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RctlLimits {
+    pub memoryuse_mb: u32,
+    pub maxproc: u32,
+    pub pcpu_pct: u32,
+}
+
 /// OS abstraction for atomic workspace + memory dual snapshots (`hal-workspace`).
 pub trait WorkspaceBackend: Send + Sync {
+    fn clone_episode_datasets(
+        &self,
+        agent_id: &str,
+        episode_id: &str,
+    ) -> Result<(String, String), HalOsError>;
+
+    fn destroy_episode_datasets(
+        &self,
+        workspace_dataset: &str,
+        memory_dataset: &str,
+    ) -> Result<(), HalOsError>;
+
     fn create_dual_snapshot(
         &self,
         req: &DualSnapshotRequest<'_>,
@@ -64,6 +84,7 @@ pub trait WorkspaceBackend: Send + Sync {
 
 /// OS abstraction for FreeBSD Jail lifecycle control (`hal-sandbox` / `hal-watchdog`).
 pub trait SandboxBackend: Send + Sync {
+    fn apply_rctl_limits(&self, jail_name: &str, limits: &RctlLimits) -> Result<(), HalOsError>;
     fn start_jail(&self, jail_name: &str) -> Result<(), HalOsError>;
     fn stop_jail(&self, jail_name: &str) -> Result<(), HalOsError>;
     fn is_jail_running(&self, jail_name: &str) -> Result<bool, HalOsError>;
@@ -89,11 +110,67 @@ fn validate_safe_ident(value: &str, label: &str) -> Result<(), HalOsError> {
     Ok(())
 }
 
+fn validate_leaf_ident(value: &str, label: &str) -> Result<(), HalOsError> {
+    if value.contains('/') {
+        return Err(HalOsError::InvalidArgument(format!(
+            "unsafe {label} '{value}'"
+        )));
+    }
+    validate_safe_ident(value, label)
+}
+
 /// FreeBSD OpenZFS CLI implementation of `WorkspaceBackend`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FreeBsdZfsWorkspaceBackend;
 
 impl WorkspaceBackend for FreeBsdZfsWorkspaceBackend {
+    fn clone_episode_datasets(
+        &self,
+        agent_id: &str,
+        episode_id: &str,
+    ) -> Result<(String, String), HalOsError> {
+        validate_leaf_ident(agent_id, "agent_id")?;
+        validate_leaf_ident(episode_id, "episode_id")?;
+        let ws_ds = format!("halpool/workspaces/active/{agent_id}/{episode_id}");
+        let mem_ds = format!("halpool/memory/active/{agent_id}/{episode_id}");
+        for ds in [&ws_ds, &mem_ds] {
+            let out = Command::new("zfs").args(["create", "-p", ds]).output()?;
+            if !out.status.success() {
+                return Err(HalOsError::CommandFailed {
+                    cmd: format!("zfs create -p {ds}"),
+                    stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                });
+            }
+        }
+        Ok((ws_ds, mem_ds))
+    }
+
+    fn destroy_episode_datasets(
+        &self,
+        workspace_dataset: &str,
+        memory_dataset: &str,
+    ) -> Result<(), HalOsError> {
+        validate_safe_ident(workspace_dataset, "workspace_dataset")?;
+        validate_safe_ident(memory_dataset, "memory_dataset")?;
+        if !workspace_dataset.starts_with("halpool/workspaces/active/")
+            || !memory_dataset.starts_with("halpool/memory/active/")
+        {
+            return Err(HalOsError::InvalidArgument(
+                "destroy_episode_datasets only permits active episode datasets".to_string(),
+            ));
+        }
+        for ds in [workspace_dataset, memory_dataset] {
+            let out = Command::new("zfs").args(["destroy", "-r", ds]).output()?;
+            if !out.status.success() {
+                return Err(HalOsError::CommandFailed {
+                    cmd: format!("zfs destroy -r {ds}"),
+                    stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn create_dual_snapshot(
         &self,
         req: &DualSnapshotRequest<'_>,
@@ -157,6 +234,30 @@ impl WorkspaceBackend for FreeBsdZfsWorkspaceBackend {
 pub struct FreeBsdJailBackend;
 
 impl SandboxBackend for FreeBsdJailBackend {
+    fn apply_rctl_limits(&self, jail_name: &str, limits: &RctlLimits) -> Result<(), HalOsError> {
+        validate_leaf_ident(jail_name, "jail_name")?;
+        if limits.memoryuse_mb == 0 || limits.maxproc == 0 || limits.pcpu_pct == 0 {
+            return Err(HalOsError::InvalidArgument(
+                "rctl limits must all be > 0".to_string(),
+            ));
+        }
+        let rules = [
+            format!("jail:{jail_name}:memoryuse:deny={}M", limits.memoryuse_mb),
+            format!("jail:{jail_name}:maxproc:deny={}", limits.maxproc),
+            format!("jail:{jail_name}:pcpu:deny={}", limits.pcpu_pct),
+        ];
+        for rule in &rules {
+            let out = Command::new("rctl").args(["-a", rule]).output()?;
+            if !out.status.success() {
+                return Err(HalOsError::CommandFailed {
+                    cmd: format!("rctl -a {rule}"),
+                    stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn start_jail(&self, jail_name: &str) -> Result<(), HalOsError> {
         validate_safe_ident(jail_name, "jail_name")?;
         let out = Command::new("service")
@@ -219,10 +320,43 @@ impl FirewallBackend for FreeBsdPfBackend {
 /// Thread-safe in-memory mock workspace backend for fast tests.
 #[derive(Debug, Default)]
 pub struct MockWorkspaceBackend {
+    datasets: Mutex<BTreeSet<String>>,
     snapshots: Mutex<BTreeMap<String, DualSnapshot>>,
 }
 
 impl WorkspaceBackend for MockWorkspaceBackend {
+    fn clone_episode_datasets(
+        &self,
+        agent_id: &str,
+        episode_id: &str,
+    ) -> Result<(String, String), HalOsError> {
+        validate_leaf_ident(agent_id, "agent_id")?;
+        validate_leaf_ident(episode_id, "episode_id")?;
+        let ws_ds = format!("halpool/workspaces/active/{agent_id}/{episode_id}");
+        let mem_ds = format!("halpool/memory/active/{agent_id}/{episode_id}");
+        let mut guard = self
+            .datasets
+            .lock()
+            .expect("MockWorkspaceBackend datasets mutex poisoned");
+        guard.insert(ws_ds.clone());
+        guard.insert(mem_ds.clone());
+        Ok((ws_ds, mem_ds))
+    }
+
+    fn destroy_episode_datasets(
+        &self,
+        workspace_dataset: &str,
+        memory_dataset: &str,
+    ) -> Result<(), HalOsError> {
+        let mut guard = self
+            .datasets
+            .lock()
+            .expect("MockWorkspaceBackend datasets mutex poisoned");
+        guard.remove(workspace_dataset);
+        guard.remove(memory_dataset);
+        Ok(())
+    }
+
     fn create_dual_snapshot(
         &self,
         req: &DualSnapshotRequest<'_>,
@@ -273,9 +407,35 @@ impl WorkspaceBackend for MockWorkspaceBackend {
 #[derive(Debug, Default)]
 pub struct MockSandboxBackend {
     running: Mutex<BTreeSet<String>>,
+    limits: Mutex<BTreeMap<String, RctlLimits>>,
+}
+
+impl MockSandboxBackend {
+    #[must_use]
+    pub fn applied_limits(&self, jail_name: &str) -> Option<RctlLimits> {
+        self.limits
+            .lock()
+            .expect("MockSandboxBackend limits mutex poisoned")
+            .get(jail_name)
+            .copied()
+    }
 }
 
 impl SandboxBackend for MockSandboxBackend {
+    fn apply_rctl_limits(&self, jail_name: &str, limits: &RctlLimits) -> Result<(), HalOsError> {
+        validate_leaf_ident(jail_name, "jail_name")?;
+        if limits.memoryuse_mb == 0 || limits.maxproc == 0 || limits.pcpu_pct == 0 {
+            return Err(HalOsError::InvalidArgument(
+                "rctl limits must all be > 0".to_string(),
+            ));
+        }
+        self.limits
+            .lock()
+            .expect("MockSandboxBackend limits mutex poisoned")
+            .insert(jail_name.to_string(), *limits);
+        Ok(())
+    }
+
     fn start_jail(&self, jail_name: &str) -> Result<(), HalOsError> {
         validate_safe_ident(jail_name, "jail_name")?;
         self.running

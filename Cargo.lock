@@ -87,6 +87,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hal-net-broker"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-os-hal",
+ "hal-policy",
+ "hal-proto",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "hal-os-hal"
 version = "0.1.0"
 dependencies = [
@@ -112,6 +125,33 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "hal-sandbox"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-bus",
+ "hal-net-broker",
+ "hal-os-hal",
+ "hal-policy",
+ "hal-proto",
+ "hal-workspace",
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hal-workspace"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-os-hal",
+ "hal-proto",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

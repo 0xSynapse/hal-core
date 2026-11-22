@@ -6,6 +6,9 @@ members = [
     "crates/hal-audit",
     "crates/hal-policy",
     "crates/hal-bus",
+    "crates/hal-net-broker",
+    "crates/hal-workspace",
+    "crates/hal-sandbox",
 ]
 
 [workspace.package]
@@ -24,3 +27,7 @@ hal-proto = { path = "crates/hal-proto" }
 hal-os-hal = { path = "crates/hal-os-hal" }
 hal-audit = { path = "crates/hal-audit" }
 hal-policy = { path = "crates/hal-policy" }
+hal-bus = { path = "crates/hal-bus" }
+hal-net-broker = { path = "crates/hal-net-broker" }
+hal-workspace = { path = "crates/hal-workspace" }
+hal-sandbox = { path = "crates/hal-sandbox" }
