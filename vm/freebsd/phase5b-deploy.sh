@@ -5,7 +5,8 @@
 
 set -eu
 
-REPO_ROOT="${REPO_ROOT:-/root/hal-os}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)}"
 BIN_DIR="${BIN_DIR:-$REPO_ROOT/target/release}"
 CONF_DEST="${CONF_DEST:-/usr/local/etc/hal-os}"
 BIN_DEST="${BIN_DEST:-/usr/local/bin}"
@@ -33,10 +34,11 @@ fi
 
 if [ ! -f "$CONF_DEST/secrets.env" ]; then
     cat <<'EOF' >"$CONF_DEST/secrets.env"
-# Populate before running `service hal_core start` (chmod 0600 required)
+# Populate before running `service hal_core start` (chmod 0600 required).
+# Per-peer keys (`HAL_PEER_KEY_<AGENT_UPPER>`) are added automatically by `halctl peer enroll`.
 HAL_TOKEN_SECRET=replace-with-32-byte-random-hex
 HAL_OOB_TOKEN=replace-with-hal-key-operator-token
-HAL_PEER_KEY_LAPTOP=replace-with-laptop-peer-proof-secret
+HAL_PEER_KEY_REMOTE_LAPTOP_01=replace-with-laptop-peer-proof-secret
 EOF
     chmod 0600 "$CONF_DEST/secrets.env"
 fi

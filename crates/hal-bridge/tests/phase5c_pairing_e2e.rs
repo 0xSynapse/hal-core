@@ -158,6 +158,7 @@ fn phase5c_oob_pairing_auto_discovery_renewal_ceiling_and_revoke_e2e() {
 
     // 1. Run real `halctl peer enroll` for an L2-capable developer laptop & an L0-capped guest peer.
     let enroll_laptop = Command::new(bin_dir.join("halctl"))
+        .env_remove("HAL_TOKEN_SECRET")
         .args([
             "peer",
             "enroll",
@@ -197,6 +198,7 @@ fn phase5c_oob_pairing_auto_discovery_renewal_ceiling_and_revoke_e2e() {
     assert!(enroll_stdout.contains("PublicKey = LaptopWgPublicKeyDemo123="));
 
     let enroll_guest = Command::new(bin_dir.join("halctl"))
+        .env_remove("HAL_TOKEN_SECRET")
         .args([
             "peer",
             "enroll",
@@ -463,6 +465,7 @@ fn phase5c_oob_pairing_auto_discovery_renewal_ceiling_and_revoke_e2e() {
     // 6. Short-TTL token expiry -> `TOKEN_EXPIRED` -> `halctl token mint` + `hal-bridge pair --token` recovery.
     let short_tok = host_dir.join("short.cap.json");
     let mint_short = Command::new(bin_dir.join("halctl"))
+        .env_remove("HAL_TOKEN_SECRET")
         .args([
             "token",
             "mint",
@@ -517,6 +520,7 @@ fn phase5c_oob_pairing_auto_discovery_renewal_ceiling_and_revoke_e2e() {
 
     let renewed_tok = host_dir.join("renewed.cap.json");
     let mint_renew = Command::new(bin_dir.join("halctl"))
+        .env_remove("HAL_TOKEN_SECRET")
         .args([
             "token",
             "mint",
@@ -566,6 +570,7 @@ fn phase5c_oob_pairing_auto_discovery_renewal_ceiling_and_revoke_e2e() {
     // 7. Tier ceiling enforcement: L0 guest peer cannot be minted an L1 token.
     let escalated_tok = host_dir.join("guest-escalated.cap.json");
     let mint_escalate = Command::new(bin_dir.join("halctl"))
+        .env_remove("HAL_TOKEN_SECRET")
         .args([
             "token",
             "mint",

@@ -69,7 +69,6 @@ hal_core_start()
         --bus-socket "$hal_core_socket_dir/gateway.sock" \
         --audit-log "$hal_core_gw_audit_log" \
         --token-secret-env HAL_TOKEN_SECRET \
-        --peer-key-env remote-laptop-01=HAL_PEER_KEY_LAPTOP \
         --serve
 
     /usr/sbin/daemon -f -p "$hal_core_pid_dir/hal-oob.pid" \
