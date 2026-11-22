@@ -24,7 +24,7 @@
   <a href="#why-hal-core">Why HAL Core?</a> ·
   <a href="#try-it-in-60-seconds">Try It in 60s</a> ·
   <a href="#how-it-works-the-tri-node-loop">How It Works</a> ·
-  <a href="#connecting-aegis-os-auth-and-security">Aegis OS Auth</a> ·
+  <a href="#connecting-aegis-os-pairing-auth-and-security">Aegis OS Pairing &amp; Auth</a> ·
   <a href="#how-hal-core-relates-to-freebsd-14">HAL Core &amp; FreeBSD 14</a> ·
   <a href="#security-guarantees">Security Guarantees</a> ·
   <a href="#documentation">Docs</a>
@@ -81,44 +81,54 @@ Instead of forcing one OS onto every device, each node owns one tightly scoped r
 
 ---
 
-## Connecting Aegis OS (Auth and Security)
+## Connecting Aegis OS: Pairing, Auth, and Security
+
+> **Not just any Aegis OS can connect to your HAL Core.** HAL Core is a single-owner personal fortress with **zero public signup, zero self-registration API, and zero inbound port on `wan0`**. A laptop can connect only after **you (the host owner)** explicitly pair it out-of-band.
 
 <p align="center">
-  <img src="./assets/diagram-aegis-auth-flow.png" alt="How Aegis OS Connects and Authenticates to HAL Core via hal-bridge and hal-gateway" width="100%" />
+  <img src="./assets/diagram-aegis-auth-flow.png" alt="Aegis OS Pairing, 7-Gate Authentication, and Containment Lifecycle in HAL Core" width="100%" />
 </p>
 
-### 1. How Aegis OS Connects (Zero SSH, 5 Typed MCP Tools)
+### Day 0 · Owner-Initiated Device Pairing (4 Independent Locks)
 
-On your laptop, the coding agent (`Antigravity`, `Claude Code`, or `Codex`) stays confined inside Aegis OS (`bwrap` / Seatbelt + CoW Shadow) and registers `hal-bridge` as a local stdio MCP server:
+To pair **your** laptop (`Aegis OS` + `hal-bridge`) with **your** `HAL Core`, you (the host owner over `mgmt0` / console / **HAL Key**) bind four independent trust locks—missing any one rejects the connection before it can touch an internal agent or vault:
+
+| Lock | Registered on HAL Core (Owner OOB) | Provisioned on Your Laptop (`hal-bridge`) | What It Stops |
+| :--- | :--- | :--- | :--- |
+| **1 · Network Tunnel (`wg0`)** | Owner adds laptop WireGuard public key + pinned tunnel IP (`10.99.0.10/32`) in [`wg-agent.conf.example`](./config/freebsd/wg-agent.conf.example). | Laptop holds the matching WireGuard private key & `HAL Core` server public key. | [`pf.conf`](./config/freebsd/pf.conf) enforces `block log all` and never exposes `:9443` on `wan0`; unpaired machines cannot even complete a WireGuard/TCP handshake. |
+| **2 · Peer Allowlist** | Owner registers `agent_id`, 64-hex `cert_sha256`, `allowed_cidrs` (`10.99.0.10/32`), and `max_risk_tier` in [`gateway-peers.toml`](./config/policy/gateway-peers.toml). | Written into `agent_id` & `cert_sha256` inside [`laptop-bridge.example.toml`](./config/bridge/laptop-bridge.example.toml). | `default_policy = "deny"`; unlisted peers or wrong source IPs are rejected (`GATEWAY_PEER_DENIED` / `GATEWAY_CIDR_DENIED`). |
+| **3 · Per-Device Proof Key** | Random secret stored in host `0600` `secrets.env` (see [`phase5b-deploy.sh`](./vm/freebsd/phase5b-deploy.sh)), loaded via `--peer-key-env`. | Injected into laptop `HAL_BRIDGE_PROOF_KEY` env **for `hal-bridge` only** (never shared inside the coding agent sandbox). | Stops `cert_sha256` spoofing: every handshake requires an `HMAC-SHA256` proof over a fresh one-time nonce. |
+| **4 · Short-Lived `CapabilityToken`** | Signed offline **on HAL Core** using master `HAL_TOKEN_SECRET` (which never leaves the fortress), binding paths, ops, ceiling & TTL. | Copied as `cap_token_path` JSON (e.g., `remote-laptop-01.cap.json`) to the laptop. | Bounds blast radius & lifetime (`expires_at_ms`): a stolen token expires and cannot self-escalate. |
+
+*Today, Day-0 enrollment is provisioned out-of-band via the files above (while `hal-bridge demo` auto-generates a local test bundle for trying it out); one-command pairing (`halctl peer enroll` / `halctl token mint` + `hal-bridge pair`) is the next planned milestone ([Phase 5C](#under-the-hood--status)).*
+
+### Day 1 · Runtime Connection &amp; 7-Gate Admission (`RemoteAuthHandshake`)
+
+On your laptop, coding agents (`Antigravity`, `Claude Code`, or `Codex`) stay confined inside Aegis OS (`bwrap` / Seatbelt + CoW Shadow) and see only `hal-bridge` over local stdio MCP (zero SSH shell, zero raw API keys):
 
 ```bash
 export HAL_BRIDGE_PROOF_KEY="<shared-or-mtls-derived-proof-key>"
 hal-bridge --config config/bridge/laptop-bridge.example.toml mcp
 ```
 
-- **Local MCP Only**: The laptop agent never gets an SSH shell or raw socket—only JSON-RPC 2.0 tools (`hal_ping`, `hal_vault_read`, `hal_propose_action`, `hal_send_ipc`, `hal_publish_event`).
-- **Network Tunnel (`wg-agent`)**: `hal-bridge` dials `gateway_addr` (`10.99.0.1:9443`) over the dedicated `wg0` WireGuard interface configured by [`config/bridge/laptop-bridge.example.toml`](./config/bridge/laptop-bridge.example.toml) and admitted against [`config/policy/gateway-peers.toml`](./config/policy/gateway-peers.toml) (`default_policy = "deny"`).
-
-### 2. 7-Gate Cryptographic Admission (`RemoteAuthHandshake`)
-
-Before any RPC is forwarded to `hal-bus`, `GatewayState::authenticate_remote` in [`crates/hal-gateway/src/server.rs`](./crates/hal-gateway/src/server.rs) and [`protocol.rs`](./crates/hal-gateway/src/protocol.rs) enforces seven mandatory gates in sequence:
+`hal-bridge` dials `10.99.0.1:9443` over `wg0` and exposes strictly 5 typed tools (`hal_ping`, `hal_vault_read`, `hal_propose_action`, `hal_send_ipc`, `hal_publish_event`). Before forwarding any RPC to `hal-bus`, `GatewayState::authenticate_remote` in [`crates/hal-gateway/src/server.rs`](./crates/hal-gateway/src/server.rs) and [`protocol.rs`](./crates/hal-gateway/src/protocol.rs) enforces seven mandatory gates:
 
 | Gate | Check Enforced by `hal-gateway` | Failure Code |
 | :--- | :--- | :--- |
 | **G1 · Peer Allowlist** | `cert_sha256` (64 lowercase hex chars) must match an enabled `[[peers]]` entry in `gateway-peers.toml`. | `GATEWAY_PEER_DENIED` |
 | **G2 · Live Revocation** | Rejects revoked remote agents during handshake **and** before every subsequent RPC on an already-open TCP connection. | `AGENT_REVOKED` |
-| **G3 · Source CIDR** | Connecting TCP peer IP must fall inside the peer's `allowed_cidrs` (`10.99.0.0/24`). | `GATEWAY_CIDR_DENIED` |
+| **G3 · Source CIDR** | Connecting TCP peer IP must fall inside the peer's `allowed_cidrs` (`10.99.0.10/32`). | `GATEWAY_CIDR_DENIED` |
 | **G4 · Identity Binding** | `handshake.claimed_agent_id` must match the allowlisted certificate subject (`peer.agent_id`). | `IDENTITY_MISMATCH` |
 | **G5 · Nonce Replay Defense** | Rejects empty nonces or any reused `agent_id:client_nonce` pair tracked in `used_nonces`. | `GATEWAY_REPLAY_DENIED` |
 | **G6 · Proof-of-Possession** | Constant-time `HMAC-SHA256` verification over `"hal-gateway-proof-v1:{id}:{cert_sha256}:{nonce}"` using the registered peer proof key. | `GATEWAY_CERT_PROOF_FAILED` |
-| **G7 · Capability Token & Ceiling** | Verifies signed `CapabilityToken` HMAC, expiration (`expires_at_ms > now_ms`), matching subject, and `token.max_risk_tier <= peer.max_risk_tier`. | `INVALID_CAP_TOKEN` / `TOKEN_EXPIRED` / `RISK_TIER_DENIED` |
+| **G7 · Capability Token &amp; Ceiling** | Verifies signed `CapabilityToken` HMAC, expiration (`expires_at_ms > now_ms`), matching subject, and `token.max_risk_tier <= peer.max_risk_tier`. | `INVALID_CAP_TOKEN` / `TOKEN_EXPIRED` / `RISK_TIER_DENIED` |
 
-### 3. Why a Prompt-Injected Laptop Agent Still Cannot Break HAL Core
+### Containment &amp; Day 2 · Expiry, Renewal, and 1-Tap Revocation
 
-- **Client Pre-Flight & Automatic Tainting**: `validate_vault_path()` in [`crates/hal-bridge/src/client.rs`](./crates/hal-bridge/src/client.rs) blocks path traversal (`..`, `\0`, empty segments, non-`/vault/` paths), while any event published from the laptop is forcibly tagged `TrustLevel::UntrustedExternal` + `TaintTag::UntrustedMsg`.
-- **Firewall & Identity Confinement**: FreeBSD [`config/freebsd/pf.conf`](./config/freebsd/pf.conf) limits `wg0` (`10.99.0.0/24`) strictly to TCP port `9443`—making `mgmt0` / `wg-oob` (**HAL Key** `:8443`) and SSH (`:22`) unreachable—while `hal-gateway` binds the authenticated session server-side to an immutable `AgentPrincipal` (`TrustDomain::RemoteExternal`) over `LOCAL_PEERCRED`-verified `gateway.sock`.
+- **Client Pre-Flight &amp; Automatic Tainting**: `validate_vault_path()` in [`crates/hal-bridge/src/client.rs`](./crates/hal-bridge/src/client.rs) blocks path traversal (`..`, `\0`, empty segments, non-`/vault/` paths), while any event published from the laptop is forcibly tagged `TrustLevel::UntrustedExternal` + `TaintTag::UntrustedMsg`.
+- **Firewall &amp; Identity Confinement**: FreeBSD [`config/freebsd/pf.conf`](./config/freebsd/pf.conf) limits `wg0` strictly to TCP `:9443`—making `mgmt0` / `wg-oob` (**HAL Key** `:8443`) and SSH (`:22`) unreachable—while `hal-gateway` binds the session server-side to an immutable `AgentPrincipal` (`TrustDomain::RemoteExternal`) over `LOCAL_PEERCRED`-verified `gateway.sock`.
 - **Human-Gated `L2` + Immutable Audit**: Remote agents cannot bypass `L2` approval (`PENDING_APPROVAL` waits for a human tap on **HAL Key**), and every allow/deny decision is written to the SHA-256 `hal-audit` chain.
-- **1-Tap Live Revocation**: Revoking `remote-laptop-01` in **HAL Key** (`POST /api/v1/agents/{id}/revoke`) immediately severs active sessions on their very next RPC (`AGENT_REVOKED`).
+- **Short-Lived Expiry &amp; 1-Tap Live Revocation**: Tokens expire automatically (`TOKEN_EXPIRED`) until renewed by the owner. Revoking `remote-laptop-01` via **HAL Key** (`POST /api/v1/agents/{id}/revoke`) or `halctl agent revoke` ([`halctl.rs`](./crates/hal-oob/src/bin/halctl.rs)) severs even already-open TCP sessions on the very next RPC (`AGENT_REVOKED`), and removing its `wg0.conf` / `gateway-peers.toml` entries completes permanent de-enrollment.
 
 ---
 
@@ -223,6 +233,7 @@ hal-core/
 - [x] **Phase 4 — Cognitive Runtime & Red-Team Drills**: `hal-brain`, `adapter-vault`, `adapter-work`, and all 4 flagship red-team drills.
 - [x] **Phase 5A — Tri-Node Loop**: Embedded **HAL Key** Mobile PWA in `hal-oob`, laptop crate `hal-bridge` (MCP stdio + demo cluster), and E2E tests.
 - [x] **Phase 5B — Multi-Process Daemons, HTTPS/LLM Broker & `adapter-digest`**: Real `--serve` daemon loops across `hal-bus`/`hal-gateway`/`hal-oob`/`hal-watchdog`, `CurlHttpsTransport`, OpenAI-compatible planner, `adapter-digest`, FreeBSD `rc.d/hal_core`, dual-WireGuard `pf.conf`, and `vm/freebsd/phase5b-deploy.sh` (`65/65` tests green).
+- [ ] **Phase 5C — One-Command Device Pairing & Token Renewal**: `halctl peer enroll` / `halctl token mint` + `hal-bridge pair` to replace manual Day-0 OOB file provisioning.
 - [ ] **Phase 6 — Hardware Adapters (`adapter-mqtt`) & Appliance Image**: Real smart-home MQTT/Matter adapter and unattended FreeBSD 14.5 appliance VM image builder.
 
 </details>
