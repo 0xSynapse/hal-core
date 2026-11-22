@@ -1,0 +1,9 @@
+[package]
+name = "hal-os-hal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hal-proto.workspace = true
+libc.workspace = true

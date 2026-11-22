@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/hal-proto",
+    "crates/hal-os-hal",
+    "crates/hal-audit",
+    "crates/hal-policy",
+    "crates/hal-bus",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hmac = "0.12"
+toml = "0.8"
+libc = "0.2"
+hal-proto = { path = "crates/hal-proto" }
+hal-os-hal = { path = "crates/hal-os-hal" }
+hal-audit = { path = "crates/hal-audit" }
+hal-policy = { path = "crates/hal-policy" }

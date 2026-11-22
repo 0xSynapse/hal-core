@@ -1,0 +1,18 @@
+[package]
+name = "hal-bus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hal-bus"
+path = "src/main.rs"
+
+[dependencies]
+hal-proto.workspace = true
+hal-os-hal.workspace = true
+hal-audit.workspace = true
+hal-policy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+libc.workspace = true
