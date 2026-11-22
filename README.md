@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/hal-os-logo.png" alt="HAL-OS Logo" width="220" />
+  <img src="./assets/hal-os-logo.png" alt="HAL Core Logo" width="220" />
 </p>
 
 <h1 align="center">HAL Core &amp; HAL Key</h1>
@@ -148,9 +148,53 @@ flowchart TD
 
 ---
 
-## Why FreeBSD 14 + Rust + KVM?
+## How HAL Core Relates to FreeBSD 14 (Appliance Model & OS Abstraction)
 
-FreeBSD 14 provides orthogonal, tightly integrated kernel and base-system primitives that map 1:1 to a multi-agent security architecture, while Rust gives us memory-safe, single-binary brainstem daemons behind a clean `hal-os-hal` OS abstraction trait boundary:
+**HAL Core is not a custom OS kernel**—it is a deterministic Rust userland control plane running **on top of FreeBSD 14**, analogous to how **TrueNAS Core** or **pfSense / OPNsense** pair a specialized appliance control plane with a hardened FreeBSD base system. Together, **FreeBSD 14** (*Spinal Cord*: kernel hard-isolation shell) and **HAL Core** (*Brainstem*: AI-aware policy, audit, egress broker, and OOB control plane) form a dedicated personal AI fortress appliance.
+
+```mermaid
+flowchart TB
+    subgraph CORE["HAL Core — Portable Rust Userland Control Plane (AI Semantics)"]
+        CTRL["Brainstem Daemons (hal-bus / hal-policy / hal-audit / hal-watchdog)"]
+        EGRESS["hal-net-broker (Allowlist + TLS-Boundary Secret Injection + DLP)"]
+        INGRESS["Tri-Node Interfaces (hal-gateway for Laptop wg-agent · hal-oob / HAL Key PWA for Phone wg-oob)"]
+        ADAPT["Habitat Adapters & Runtime (adapter-vault / netmon / work / digest / sim-ship · hal-brain)"]
+    end
+
+    subgraph HAL["hal-os-hal — OS Abstraction Trait Boundary (crates/hal-os-hal)"]
+        TRAITS["WorkspaceBackend · SandboxBackend · FirewallBackend · CapsicumGuard · AppendOnlyGuard · PeerCredProvider"]
+    end
+
+    subgraph FBSD["Production Fortress: FreeBSD 14 Kernel & Base System (Layer 0 Spinal Cord)"]
+        ZFS["FreeBsdZfsWorkspaceBackend → OpenZFS (AES-256-GCM Vault + Atomic Dual-Snapshots + bectl)"]
+        JAIL["FreeBsdJailBackend → No-IP / VNET Jails (ip4=disable ip6=disable) + RCTL Hard Limits"]
+        PF["FreeBsdPfBackend → PF Firewall (block log all · wan0 only user _hal_broker · mgmt0/wg1 OOB)"]
+        KERN["Native Syscalls → cap_enter(2) Capsicum · chflags(SF_APPEND) · LOCAL_PEERCRED · rc.d/hal_core"]
+    end
+
+    subgraph DEV["Dev / Test Host: Linux (and Future Linux Appliance Backend)"]
+        LCRED["OsPeerCredProvider → Kernel SO_PEERCRED (real UID/GID verification)"]
+        NOOP["OsCapsicumGuard & OsAppendOnlyGuard → Safe No-Op on Non-FreeBSD"]
+        MOCK["MockWorkspace / MockSandbox / MockFirewall → 65 Offline Tests & Local Tri-Node Demo"]
+    end
+
+    CTRL --> HAL
+    EGRESS --> HAL
+    INGRESS --> HAL
+    ADAPT --> HAL
+
+    HAL -->|"Production Deploy (FreeBSD 14 Host / KVM VM)"| FBSD
+    HAL -->|"Local Dev & CI (Linux Host)"| DEV
+```
+
+- **FreeBSD 14 (Layer 0 Kernel Boundary — Spinal Cord)**: Enforces hard OS-level boundaries that compromised userland agents cannot bypass ([`config/freebsd/jail.conf`](./config/freebsd/jail.conf), [`config/freebsd/pf.conf`](./config/freebsd/pf.conf), [`config/freebsd/rc.d/hal_core`](./config/freebsd/rc.d/hal_core), OpenZFS `halpool`, `cap_enter(2)`, `chflags sappnd`, and `rctl`).
+- **HAL Core (Layers 1–4 Rust Control Plane — Brainstem & Adapters)**: Enforces AI-specific semantics that an OS kernel does not understand (`L0`/`L1`/`L2` capability tokens, transitive IPC tainting, secretless egress + DLP, laptop `hal-gateway`, and phone **HAL Key** PWA).
+- **Two Runtime Modes via [`crates/hal-os-hal`](./crates/hal-os-hal/src/lib.rs)**:
+  1. **Linux Dev / CI Mode**: Compiles and runs all 19 crates, 65 offline tests, multi-process daemons, and the interactive Tri-Node demo natively—using real Linux `SO_PEERCRED` in [`peercred.rs`](./crates/hal-os-hal/src/peercred.rs), safe no-ops for Capsicum/`chflags`, and `Mock*` backends in [`backends.rs`](./crates/hal-os-hal/src/backends.rs).
+  2. **FreeBSD 14 Hardened Fortress Mode**: Activates native `FreeBsdZfsWorkspaceBackend`, `FreeBsdJailBackend`, and `FreeBsdPfBackend` ([`backends.rs`](./crates/hal-os-hal/src/backends.rs)), alongside `cap_enter(2)` ([`capsicum.rs`](./crates/hal-os-hal/src/capsicum.rs)), `chflags(SF_APPEND)` ([`append_only.rs`](./crates/hal-os-hal/src/append_only.rs)), and `LOCAL_PEERCRED` ([`peercred.rs`](./crates/hal-os-hal/src/peercred.rs)). Supporting a Linux-based homelab appliance later only requires implementing the `hal-os-hal` traits (e.g., `bwrap` + `nftables` + Btrfs/ZFS) without rewriting core logic.
+- **Positioning vs. Aegis OS**: [**Aegis OS**](https://github.com/heurion-org/aegis-os) protects your interactive macOS/Linux workstation (`Seatbelt`/`bwrap` + `APFS`/`Btrfs`), whereas **HAL Core on FreeBSD 14** is your always-on dedicated home/VM fortress, and **HAL Key** is your phone's out-of-band sovereignty key.
+
+### FreeBSD 14 Primitives Mapped 1:1 to HAL Core
 
 | Primitive | Role in HAL Core |
 |---|---|
@@ -184,7 +228,7 @@ FreeBSD 14 provides orthogonal, tightly integrated kernel and base-system primit
 ## Rust Cargo Workspace Layout (19 Crates)
 
 ```text
-hal-os/
+hal-core/
 ├── Cargo.toml                  # 19-crate Rust workspace manifest
 ├── docs/                       # Detailed architecture, security, protocol & VM specs
 ├── crates/
