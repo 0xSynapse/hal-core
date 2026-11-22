@@ -14,6 +14,10 @@ members = [
     "crates/hal-watchdog",
     "crates/hal-adapters/adapter-netmon",
     "crates/hal-adapters/adapter-sim-ship",
+    "crates/hal-adapters/adapter-vault",
+    "crates/hal-adapters/adapter-work",
+    "crates/hal-brain",
+    "tests/redteam",
 ]
 
 [workspace.package]
@@ -41,3 +45,6 @@ hal-oob = { path = "crates/hal-oob" }
 hal-watchdog = { path = "crates/hal-watchdog" }
 adapter-netmon = { path = "crates/hal-adapters/adapter-netmon" }
 adapter-sim-ship = { path = "crates/hal-adapters/adapter-sim-ship" }
+adapter-vault = { path = "crates/hal-adapters/adapter-vault" }
+adapter-work = { path = "crates/hal-adapters/adapter-work" }
+hal-brain = { path = "crates/hal-brain" }

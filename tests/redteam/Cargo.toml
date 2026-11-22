@@ -1,0 +1,26 @@
+[package]
+name = "hal-redteam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hal-proto.workspace = true
+hal-os-hal.workspace = true
+hal-audit.workspace = true
+hal-policy.workspace = true
+hal-bus.workspace = true
+hal-net-broker.workspace = true
+hal-workspace.workspace = true
+hal-sandbox.workspace = true
+hal-gateway.workspace = true
+hal-oob.workspace = true
+hal-watchdog.workspace = true
+adapter-netmon.workspace = true
+adapter-sim-ship.workspace = true
+adapter-vault.workspace = true
+adapter-work.workspace = true
+hal-brain.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+libc.workspace = true

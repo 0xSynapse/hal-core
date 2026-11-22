@@ -23,6 +23,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "adapter-vault"
+version = "0.1.0"
+dependencies = [
+ "hal-bus",
+ "hal-proto",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "adapter-work"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-os-hal",
+ "hal-proto",
+ "hal-workspace",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -88,6 +110,19 @@ name = "hal-audit"
 version = "0.1.0"
 dependencies = [
  "hal-os-hal",
+ "hal-proto",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hal-brain"
+version = "0.1.0"
+dependencies = [
+ "hal-audit",
+ "hal-bus",
+ "hal-gateway",
+ "hal-net-broker",
  "hal-proto",
  "serde",
  "serde_json",
@@ -182,6 +217,31 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "hal-redteam"
+version = "0.1.0"
+dependencies = [
+ "adapter-netmon",
+ "adapter-sim-ship",
+ "adapter-vault",
+ "adapter-work",
+ "hal-audit",
+ "hal-brain",
+ "hal-bus",
+ "hal-gateway",
+ "hal-net-broker",
+ "hal-oob",
+ "hal-os-hal",
+ "hal-policy",
+ "hal-proto",
+ "hal-sandbox",
+ "hal-watchdog",
+ "hal-workspace",
+ "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
