@@ -24,6 +24,7 @@
   <a href="#why-hal-core">Why HAL Core?</a> ·
   <a href="#try-it-in-60-seconds">Try It in 60s</a> ·
   <a href="#how-it-works-the-tri-node-loop">How It Works</a> ·
+  <a href="#connecting-aegis-os-auth-and-security">Aegis OS Auth</a> ·
   <a href="#how-hal-core-relates-to-freebsd-14">HAL Core &amp; FreeBSD 14</a> ·
   <a href="#security-guarantees">Security Guarantees</a> ·
   <a href="#documentation">Docs</a>
@@ -74,33 +75,50 @@ Instead of forcing one OS onto every device, each node owns one tightly scoped r
 | **Home Fortress (`HAL Core` on FreeBSD 14)** | Runs `hal-bus`, `hal-policy`, `hal-audit`, `hal-watchdog`, `hal-net-broker`, `hal-gateway`, `hal-oob`, and resident agents/adapters. | No-IP Jails (`ip4=disable ip6=disable`), PF `user _hal_broker` egress-only, transitive IPC tainting, DLP, and atomic ZFS dual-snapshots. |
 | **Phone (`HAL Key` Mobile PWA)** | Embedded single-file mobile UI served by `hal-oob` strictly on `mgmt0` / `wg-oob`. | Constant-time `X-Hal-Oob-Token`, `CSP`, `X-Frame-Options: DENY`, non-wildcard bind check; management plane completely invisible to agents. |
 
-```mermaid
-flowchart LR
-    subgraph LAPTOP["Laptop: Aegis OS + hal-bridge"]
-        AGENT["Coding Agent (AGY / Claude Code / Codex)"]
-        BRIDGE["hal-bridge (JSON-RPC 2.0 MCP stdio)"]
-        AGENT <--> BRIDGE
-    end
+<p align="center">
+  <img src="./assets/diagram-trinode-overview.png" alt="Tri-Node Personal AI Architecture (Aegis OS, HAL Core, HAL Key)" width="100%" />
+</p>
 
-    subgraph HOME["Home Fortress: HAL Core (FreeBSD 14 + Rust)"]
-        GW["hal-gateway (wg-agent + HMAC Proof)"]
-        BUS["hal-bus + hal-policy + hal-audit + hal-watchdog"]
-        JAILS["No-IP Jails (vault / coder / research / habitat)"]
-        BROKER["hal-net-broker (wan0 _hal_broker + DLP)"]
-        OOB["hal-oob (mgmt0 / wg-oob + HAL Key PWA)"]
-        GW <--> BUS
-        BUS <--> JAILS
-        BUS <--> BROKER
-        OOB --> BUS
-    end
+---
 
-    subgraph PHONE["Phone / Operator Browser"]
-        KEY["HAL Key PWA (L2 Approvals / Freeze / Mode / Audit)"]
-    end
+## Connecting Aegis OS (Auth and Security)
 
-    BRIDGE <-->|"wg-agent TCP + CapabilityToken"| GW
-    KEY <-->|"wg-oob HTTP + X-Hal-Oob-Token"| OOB
+<p align="center">
+  <img src="./assets/diagram-aegis-auth-flow.png" alt="How Aegis OS Connects and Authenticates to HAL Core via hal-bridge and hal-gateway" width="100%" />
+</p>
+
+### 1. How Aegis OS Connects (Zero SSH, 5 Typed MCP Tools)
+
+On your laptop, the coding agent (`Antigravity`, `Claude Code`, or `Codex`) stays confined inside Aegis OS (`bwrap` / Seatbelt + CoW Shadow) and registers `hal-bridge` as a local stdio MCP server:
+
+```bash
+export HAL_BRIDGE_PROOF_KEY="<shared-or-mtls-derived-proof-key>"
+hal-bridge --config config/bridge/laptop-bridge.example.toml mcp
 ```
+
+- **Local MCP Only**: The laptop agent never gets an SSH shell or raw socket—only JSON-RPC 2.0 tools (`hal_ping`, `hal_vault_read`, `hal_propose_action`, `hal_send_ipc`, `hal_publish_event`).
+- **Network Tunnel (`wg-agent`)**: `hal-bridge` dials `gateway_addr` (`10.99.0.1:9443`) over the dedicated `wg0` WireGuard interface configured by [`config/bridge/laptop-bridge.example.toml`](./config/bridge/laptop-bridge.example.toml) and admitted against [`config/policy/gateway-peers.toml`](./config/policy/gateway-peers.toml) (`default_policy = "deny"`).
+
+### 2. 7-Gate Cryptographic Admission (`RemoteAuthHandshake`)
+
+Before any RPC is forwarded to `hal-bus`, `GatewayState::authenticate_remote` in [`crates/hal-gateway/src/server.rs`](./crates/hal-gateway/src/server.rs) and [`protocol.rs`](./crates/hal-gateway/src/protocol.rs) enforces seven mandatory gates in sequence:
+
+| Gate | Check Enforced by `hal-gateway` | Failure Code |
+| :--- | :--- | :--- |
+| **G1 · Peer Allowlist** | `cert_sha256` (64 lowercase hex chars) must match an enabled `[[peers]]` entry in `gateway-peers.toml`. | `GATEWAY_PEER_DENIED` |
+| **G2 · Live Revocation** | Rejects revoked remote agents during handshake **and** before every subsequent RPC on an already-open TCP connection. | `AGENT_REVOKED` |
+| **G3 · Source CIDR** | Connecting TCP peer IP must fall inside the peer's `allowed_cidrs` (`10.99.0.0/24`). | `GATEWAY_CIDR_DENIED` |
+| **G4 · Identity Binding** | `handshake.claimed_agent_id` must match the allowlisted certificate subject (`peer.agent_id`). | `IDENTITY_MISMATCH` |
+| **G5 · Nonce Replay Defense** | Rejects empty nonces or any reused `agent_id:client_nonce` pair tracked in `used_nonces`. | `GATEWAY_REPLAY_DENIED` |
+| **G6 · Proof-of-Possession** | Constant-time `HMAC-SHA256` verification over `"hal-gateway-proof-v1:{id}:{cert_sha256}:{nonce}"` using the registered peer proof key. | `GATEWAY_CERT_PROOF_FAILED` |
+| **G7 · Capability Token & Ceiling** | Verifies signed `CapabilityToken` HMAC, expiration (`expires_at_ms > now_ms`), matching subject, and `token.max_risk_tier <= peer.max_risk_tier`. | `INVALID_CAP_TOKEN` / `TOKEN_EXPIRED` / `RISK_TIER_DENIED` |
+
+### 3. Why a Prompt-Injected Laptop Agent Still Cannot Break HAL Core
+
+- **Client Pre-Flight & Automatic Tainting**: `validate_vault_path()` in [`crates/hal-bridge/src/client.rs`](./crates/hal-bridge/src/client.rs) blocks path traversal (`..`, `\0`, empty segments, non-`/vault/` paths), while any event published from the laptop is forcibly tagged `TrustLevel::UntrustedExternal` + `TaintTag::UntrustedMsg`.
+- **Firewall & Identity Confinement**: FreeBSD [`config/freebsd/pf.conf`](./config/freebsd/pf.conf) limits `wg0` (`10.99.0.0/24`) strictly to TCP port `9443`—making `mgmt0` / `wg-oob` (**HAL Key** `:8443`) and SSH (`:22`) unreachable—while `hal-gateway` binds the authenticated session server-side to an immutable `AgentPrincipal` (`TrustDomain::RemoteExternal`) over `LOCAL_PEERCRED`-verified `gateway.sock`.
+- **Human-Gated `L2` + Immutable Audit**: Remote agents cannot bypass `L2` approval (`PENDING_APPROVAL` waits for a human tap on **HAL Key**), and every allow/deny decision is written to the SHA-256 `hal-audit` chain.
+- **1-Tap Live Revocation**: Revoking `remote-laptop-01` in **HAL Key** (`POST /api/v1/agents/{id}/revoke`) immediately severs active sessions on their very next RPC (`AGENT_REVOKED`).
 
 ---
 
@@ -108,40 +126,9 @@ flowchart LR
 
 **HAL Core is not a custom OS kernel**—like **TrueNAS Core** or **pfSense / OPNsense**, **FreeBSD 14** supplies the armored kernel shell (*Spinal Cord*) while **HAL Core** is the deterministic Rust userland control plane (*Brainstem*) running on top of it.
 
-```mermaid
-flowchart TB
-    subgraph CORE["HAL Core — Portable Rust Userland Control Plane (AI Semantics)"]
-        CTRL["Brainstem Daemons (hal-bus / hal-policy / hal-audit / hal-watchdog)"]
-        EGRESS["hal-net-broker (Allowlist + TLS-Boundary Secret Injection + DLP)"]
-        INGRESS["Tri-Node Interfaces (hal-gateway for Laptop wg-agent · hal-oob / HAL Key PWA for Phone wg-oob)"]
-        ADAPT["Habitat Adapters & Runtime (adapter-vault / netmon / work / digest / sim-ship · hal-brain)"]
-    end
-
-    subgraph HAL["hal-os-hal — OS Abstraction Trait Boundary (crates/hal-os-hal)"]
-        TRAITS["WorkspaceBackend · SandboxBackend · FirewallBackend · CapsicumGuard · AppendOnlyGuard · PeerCredProvider"]
-    end
-
-    subgraph FBSD["Production Fortress: FreeBSD 14 Kernel & Base System (Layer 0 Spinal Cord)"]
-        ZFS["FreeBsdZfsWorkspaceBackend → OpenZFS (AES-256-GCM Vault + Atomic Dual-Snapshots + bectl)"]
-        JAIL["FreeBsdJailBackend → No-IP / VNET Jails (ip4=disable ip6=disable) + RCTL Hard Limits"]
-        PF["FreeBsdPfBackend → PF Firewall (block log all · wan0 only user _hal_broker · mgmt0/wg1 OOB)"]
-        KERN["Native Syscalls → cap_enter(2) Capsicum · chflags(SF_APPEND) · LOCAL_PEERCRED · rc.d/hal_core"]
-    end
-
-    subgraph DEV["Dev / Test Host: Linux (and Future Linux Appliance Backend)"]
-        LCRED["OsPeerCredProvider → Kernel SO_PEERCRED (real UID/GID verification)"]
-        NOOP["OsCapsicumGuard & OsAppendOnlyGuard → Safe No-Op on Non-FreeBSD"]
-        MOCK["MockWorkspace / MockSandbox / MockFirewall → 65 Offline Tests & Local Tri-Node Demo"]
-    end
-
-    CTRL --> HAL
-    EGRESS --> HAL
-    INGRESS --> HAL
-    ADAPT --> HAL
-
-    HAL -->|"Production Deploy (FreeBSD 14 Host / KVM VM)"| FBSD
-    HAL -->|"Local Dev & CI (Linux Host)"| DEV
-```
+<p align="center">
+  <img src="./assets/diagram-freebsd-architecture.png" alt="How HAL Core Relates to FreeBSD 14 via hal-os-hal" width="100%" />
+</p>
 
 - **FreeBSD 14 (Layer 0 Kernel Boundary)**: Enforces hard isolation that compromised agents cannot bypass—configured via [`config/freebsd/jail.conf`](./config/freebsd/jail.conf), [`config/freebsd/pf.conf`](./config/freebsd/pf.conf), and [`config/freebsd/rc.d/hal_core`](./config/freebsd/rc.d/hal_core).
 - **Two Runtime Modes via [`crates/hal-os-hal`](./crates/hal-os-hal/src/lib.rs)**:

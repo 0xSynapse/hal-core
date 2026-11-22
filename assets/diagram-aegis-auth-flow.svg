@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 880" width="1440" height="880">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090D16" />
+      <stop offset="55%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0E2A42" />
+      <stop offset="100%" stop-color="#091B2C" />
+    </linearGradient>
+    <linearGradient id="indigoGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1A1F3D" />
+      <stop offset="100%" stop-color="#11152B" />
+    </linearGradient>
+    <linearGradient id="crimsonGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#331320" />
+      <stop offset="100%" stop-color="#210C15" />
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2F210B" />
+      <stop offset="100%" stop-color="#1E1507" />
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0D2C24" />
+      <stop offset="100%" stop-color="#081C17" />
+    </linearGradient>
+    <pattern id="dotGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#1E293B" opacity="0.65" />
+    </pattern>
+    <marker id="arrowCyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38BDF8" />
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#FBBF24" />
+    </marker>
+    <marker id="arrowCrimson" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#FB7185" />
+    </marker>
+    <marker id="arrowEmerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34D399" />
+    </marker>
+    <marker id="arrowIndigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#818CF8" />
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1440" height="880" rx="20" fill="url(#bgGrad)" />
+  <rect x="0" y="0" width="1440" height="880" rx="20" fill="url(#dotGrid)" />
+  <rect x="1" y="1" width="1438" height="878" rx="19" fill="none" stroke="#1E293B" stroke-width="2" />
+  <rect x="40" y="24" width="6" height="54" rx="3" fill="#EF4444" />
+  <text x="60" y="47" font-family="Inter, DejaVu Sans, sans-serif" font-size="25" font-weight="700" fill="#F8FAFC" letter-spacing="0.6">HOW AEGIS OS CONNECTS &amp; AUTHENTICATES TO HAL CORE</text>
+  <text x="60" y="72" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#94A3B8">Zero SSH · 7-gate cryptographic admission in hal-gateway · server-enforced TrustDomain::RemoteExternal</text>
+  <rect x="36" y="104" width="284" height="644" rx="14" fill="url(#cyanGrad)" stroke="#0284C7" stroke-width="1.8" />
+  <rect x="50" y="116" width="256" height="32" rx="8" fill="#0C3554" />
+  <text x="62" y="137" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.5" font-weight="700" fill="#38BDF8" letter-spacing="0.5">01 · LAPTOP</text>
+  <text x="294" y="136" text-anchor="end" font-family="DejaVu Sans Mono, monospace" font-size="11" font-weight="700" fill="#38BDF8" opacity="0.9">AEGIS OS</text>
+  <rect x="52" y="162" width="252" height="96" rx="10" fill="#091B2C" stroke="#0369A1" stroke-width="1.4" />
+  <text x="66" y="186" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#7DD3FC">Coding Agent in Aegis OS</text>
+  <text x="66" y="208" font-family="Inter, DejaVu Sans, sans-serif" font-size="12" fill="#E2E8F0">Claude Code / Codex / AGY</text>
+  <text x="66" y="227" font-family="DejaVu Sans Mono, monospace" font-size="10.6" fill="#94A3B8">bwrap / Seatbelt + CoW Shadow</text>
+  <line x1="178" y1="260" x2="178" y2="284" stroke="#38BDF8" stroke-width="2" marker-end="url(#arrowCyan)" />
+  <rect x="52" y="288" width="252" height="104" rx="10" fill="#091B2C" stroke="#0369A1" stroke-width="1.4" />
+  <text x="66" y="312" font-family="DejaVu Sans Mono, monospace" font-size="13.2" font-weight="700" fill="#38BDF8">hal-bridge (MCP stdio)</text>
+  <text x="66" y="334" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.6" fill="#CBD5E1">5 typed tools only (no shell):</text>
+  <text x="66" y="353" font-family="DejaVu Sans Mono, monospace" font-size="10.6" fill="#E0F2FE">ping / vault_read / propose / ipc</text>
+  <line x1="178" y1="394" x2="178" y2="418" stroke="#38BDF8" stroke-width="2" marker-end="url(#arrowCyan)" />
+  <rect x="52" y="422" width="252" height="134" rx="10" fill="#091B2C" stroke="#0369A1" stroke-width="1.4" />
+  <text x="66" y="446" font-family="DejaVu Sans Mono, monospace" font-size="13.2" font-weight="700" fill="#38BDF8">laptop-bridge.toml + Env</text>
+  <text x="66" y="468" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#E0F2FE">cert_sha256 (64 hex chars)</text>
+  <text x="66" y="487" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#E0F2FE">cap_token_path (HMAC signed)</text>
+  <text x="66" y="506" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#FCD34D">HAL_BRIDGE_PROOF_KEY (env)</text>
+  <text x="66" y="525" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.4" fill="#94A3B8">Hidden from agent sandbox</text>
+  <line x1="178" y1="558" x2="178" y2="582" stroke="#38BDF8" stroke-width="2" marker-end="url(#arrowCyan)" />
+  <rect x="52" y="586" width="252" height="142" rx="10" fill="#071522" stroke="#0EA5E9" stroke-width="1.4" />
+  <text x="66" y="610" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#7DD3FC">Local Pre-Flight Guard</text>
+  <text x="66" y="632" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#E2E8F0">validate_vault_path() checks</text>
+  <text x="66" y="651" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.4" fill="#94A3B8">Rejects .., \0, trailing /</text>
+  <text x="66" y="670" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#E0F2FE">nonce = br-{pid}-{ts}-{seq}</text>
+  <text x="66" y="689" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#6EE7B7">HMAC PoP + RemoteAuthHandshake</text>
+  <line x1="322" y1="426" x2="344" y2="426" stroke="#38BDF8" stroke-width="2.8" marker-end="url(#arrowCyan)" />
+  <rect x="348" y="184" width="180" height="484" rx="14" fill="url(#crimsonGrad)" stroke="#E11D48" stroke-width="1.8" />
+  <rect x="362" y="196" width="152" height="32" rx="8" fill="#4C162B" />
+  <text x="374" y="217" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.5" font-weight="700" fill="#FDA4AF" letter-spacing="0.5">02 · PF + WG</text>
+  <text x="502" y="216" text-anchor="end" font-family="DejaVu Sans Mono, monospace" font-size="11" font-weight="700" fill="#FDA4AF" opacity="0.9">wg0</text>
+  <rect x="362" y="246" width="152" height="118" rx="10" fill="#220D16" stroke="#BE123C" stroke-width="1.4" />
+  <text x="376" y="270" font-family="DejaVu Sans Mono, monospace" font-size="13.2" font-weight="700" fill="#FECDD3">WireGuard wg0</text>
+  <text x="376" y="292" font-family="DejaVu Sans Mono, monospace" font-size="11" fill="#E2E8F0">10.99.0.0/24</text>
+  <text x="376" y="311" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#94A3B8">Encrypted peer</text>
+  <text x="376" y="330" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#94A3B8">tunnel to home</text>
+  <rect x="362" y="382" width="152" height="120" rx="10" fill="#0C281E" stroke="#10B981" stroke-width="1.4" />
+  <text x="376" y="406" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#34D399">ALLOW ONLY</text>
+  <text x="376" y="428" font-family="DejaVu Sans Mono, monospace" font-size="11.2" fill="#ECFDF5">TCP :9443</text>
+  <text x="376" y="447" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#CBD5E1">to hal-gateway</text>
+  <text x="376" y="466" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#94A3B8">from wg0 CIDR</text>
+  <rect x="362" y="518" width="152" height="130" rx="10" fill="#220D16" stroke="#E11D48" stroke-width="1.4" />
+  <text x="376" y="542" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#FB7185">DROP + LOG</text>
+  <text x="376" y="564" font-family="DejaVu Sans Mono, monospace" font-size="11" fill="#FFE4E6">HAL Key :8443</text>
+  <text x="376" y="583" font-family="DejaVu Sans Mono, monospace" font-size="11" fill="#FFE4E6">Host SSH :22</text>
+  <text x="376" y="602" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#94A3B8">LAN &amp; raw DNS</text>
+  <text x="376" y="621" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#FCA5A5">block log all</text>
+  <line x1="530" y1="426" x2="552" y2="426" stroke="#FB7185" stroke-width="2.8" marker-end="url(#arrowCrimson)" />
+  <rect x="556" y="104" width="526" height="644" rx="14" fill="url(#indigoGrad)" stroke="#6366F1" stroke-width="1.8" />
+  <rect x="570" y="116" width="498" height="32" rx="8" fill="#252B57" />
+  <text x="582" y="137" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.5" font-weight="700" fill="#A5B4FC" letter-spacing="0.5">03 · HAL-GATEWAY (7-GATE ADMISSION)</text>
+  <text x="1056" y="136" text-anchor="end" font-family="DejaVu Sans Mono, monospace" font-size="11" font-weight="700" fill="#A5B4FC" opacity="0.9">:9443</text>
+  <text x="572" y="164" font-family="DejaVu Sans Mono, monospace" font-size="11.4" fill="#94A3B8">GatewayState::authenticate_remote(source_ip, handshake)</text>
+  <rect x="572" y="178" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="190" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="214" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G1</text>
+  <text x="626" y="202" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">Peer Allowlist</text>
+  <text x="626" y="226" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">cert_sha256 enabled in gateway-peers.toml</text>
+  <rect x="860" y="185" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="200" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">GATEWAY_PEER_DENIED</text>
+  <rect x="572" y="249" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="261" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="285" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G2</text>
+  <text x="626" y="273" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">Live Revocation</text>
+  <text x="626" y="297" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">Not revoked (checked on auth &amp; every RPC)</text>
+  <rect x="860" y="256" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="271" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">AGENT_REVOKED</text>
+  <rect x="572" y="320" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="332" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="356" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G3</text>
+  <text x="626" y="344" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">Source CIDR Filter</text>
+  <text x="626" y="368" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">source_ip inside peer allowed_cidrs (10.99.0.0/24)</text>
+  <rect x="860" y="327" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="342" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">GATEWAY_CIDR_DENIED</text>
+  <rect x="572" y="391" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="403" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="427" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G4</text>
+  <text x="626" y="415" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">Identity Binding</text>
+  <text x="626" y="439" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">claimed_agent_id == peer.agent_id</text>
+  <rect x="860" y="398" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="413" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">IDENTITY_MISMATCH</text>
+  <rect x="572" y="462" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="474" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="498" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G5</text>
+  <text x="626" y="486" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">Nonce Replay Guard</text>
+  <text x="626" y="510" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">Unique agent_id:client_nonce recorded in used_nonces</text>
+  <rect x="860" y="469" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="484" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">GATEWAY_REPLAY_DENIED</text>
+  <rect x="572" y="533" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="545" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="569" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G6</text>
+  <text x="626" y="557" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">Constant-Time PoP</text>
+  <text x="626" y="581" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">HMAC(key, &quot;hal-gateway-proof-v1:{id}:{fp}:{nonce}&quot;)</text>
+  <rect x="860" y="540" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="555" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">GATEWAY_CERT_PROOF_FAILED</text>
+  <rect x="572" y="604" width="494" height="62" rx="9" fill="#111630" stroke="#4338CA" stroke-width="1.2" />
+  <rect x="582" y="616" width="34" height="38" rx="7" fill="#312E81" stroke="#6366F1" stroke-width="1" />
+  <text x="599" y="640" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="12.5" font-weight="700" fill="#E0E7FF">G7</text>
+  <text x="626" y="628" font-family="Inter, DejaVu Sans, sans-serif" font-size="13" font-weight="700" fill="#F1F5F9">CapabilityToken</text>
+  <text x="626" y="652" font-family="DejaVu Sans Mono, monospace" font-size="10.4" fill="#A5B4FC">HMAC sig + expiry + subject &amp; max_risk_tier &lt;= peer cap</text>
+  <rect x="860" y="611" width="196" height="22" rx="11" fill="#3B1221" stroke="#E11D48" stroke-width="1.2" />
+  <text x="958" y="626" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="9.6" font-weight="700" fill="#FDA4AF">INVALID_CAP_TOKEN</text>
+  <rect x="572" y="682" width="494" height="46" rx="23" fill="#0F172A" stroke="#4F46E5" stroke-width="1.2" />
+  <text x="819" y="709" text-anchor="middle" font-family="Inter, DejaVu Sans, sans-serif" font-size="12.2" font-weight="700" fill="#C7D2FE">Every allow &amp; deny decision is appended to SHA-256 hal-audit</text>
+  <line x1="1084" y1="426" x2="1108" y2="426" stroke="#34D399" stroke-width="2.8" marker-end="url(#arrowEmerald)" />
+  <rect x="1112" y="104" width="292" height="644" rx="14" fill="url(#emeraldGrad)" stroke="#10B981" stroke-width="1.8" />
+  <rect x="1126" y="116" width="264" height="32" rx="8" fill="#0D3B2E" />
+  <text x="1138" y="137" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.5" font-weight="700" fill="#34D399" letter-spacing="0.5">04 · EXECUTION</text>
+  <text x="1378" y="136" text-anchor="end" font-family="DejaVu Sans Mono, monospace" font-size="11" font-weight="700" fill="#34D399" opacity="0.9">HAL CORE</text>
+  <rect x="1126" y="162" width="264" height="116" rx="10" fill="#09201A" stroke="#059669" stroke-width="1.4" />
+  <text x="1140" y="186" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#6EE7B7">Immutable Session Principal</text>
+  <text x="1140" y="208" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#ECFDF5">TrustDomain::RemoteExternal</text>
+  <text x="1140" y="227" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.4" fill="#A7F3D0">Forwards via LOCAL_PEERCRED</text>
+  <text x="1140" y="246" font-family="DejaVu Sans Mono, monospace" font-size="10.6" fill="#E2E8F0">UDS gateway.sock -&gt; hal-bus</text>
+  <line x1="1258" y1="280" x2="1258" y2="298" stroke="#34D399" stroke-width="2" marker-end="url(#arrowEmerald)" />
+  <rect x="1126" y="302" width="264" height="92" rx="10" fill="#0A261E" stroke="#10B981" stroke-width="1.4" />
+  <text x="1140" y="326" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#34D399">L0 Read  (Auto-Allow)</text>
+  <text x="1140" y="348" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#E2E8F0">vault_read allowed if scoped</text>
+  <text x="1140" y="367" font-family="DejaVu Sans Mono, monospace" font-size="10.6" fill="#A7F3D0">Tags PrivateVault / Untrusted</text>
+  <rect x="1126" y="408" width="264" height="92" rx="10" fill="#091B2C" stroke="#0284C7" stroke-width="1.4" />
+  <text x="1140" y="432" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#38BDF8">L1 Write  (CoW Snapshot)</text>
+  <text x="1140" y="454" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.5" fill="#E2E8F0">Per-agent OpenZFS CoW clone</text>
+  <text x="1140" y="473" font-family="DejaVu Sans Mono, monospace" font-size="10.6" fill="#BAE6FD">Atomic disk + memory rollback</text>
+  <rect x="1126" y="514" width="264" height="106" rx="10" fill="#251B0B" stroke="#D97706" stroke-width="1.4" />
+  <text x="1140" y="538" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#FBBF24">L2 High-Risk  (HAL Key)</text>
+  <text x="1140" y="560" font-family="DejaVu Sans Mono, monospace" font-size="10.8" fill="#FEF3C7">Held in PENDING_APPROVAL</text>
+  <text x="1140" y="579" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.4" fill="#FDE68A">Human taps Approve or Reject</text>
+  <text x="1140" y="598" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.4" fill="#FCD34D">on phone over isolated wg-oob</text>
+  <rect x="1126" y="634" width="264" height="94" rx="10" fill="#2C121D" stroke="#E11D48" stroke-width="1.4" />
+  <text x="1140" y="658" font-family="Inter, DejaVu Sans, sans-serif" font-size="13.2" font-weight="700" fill="#FB7185">1-Tap Live Revocation</text>
+  <text x="1140" y="680" font-family="Inter, DejaVu Sans, sans-serif" font-size="11.4" fill="#FFE4E6">Revoke in HAL Key immediately</text>
+  <text x="1140" y="699" font-family="DejaVu Sans Mono, monospace" font-size="10.3" fill="#FECDD3">cuts open RPCs (AGENT_REVOKED)</text>
+  <rect x="36" y="772" width="1368" height="76" rx="12" fill="#111827" stroke="#334155" stroke-width="1.5" />
+  <text x="720" y="803" text-anchor="middle" font-family="Inter, DejaVu Sans, sans-serif" font-size="14" font-weight="700" fill="#F8FAFC">KEY SECURITY INVARIANTS FOR LAPTOP AGENTS</text>
+  <text x="720" y="828" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-size="11.8" fill="#7DD3FC">Zero SSH access · Server assigns RemoteExternal principal · Nonce replay blocked · L2 requires physical HAL Key tap</text>
+</svg>
