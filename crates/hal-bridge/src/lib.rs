@@ -5,6 +5,7 @@ pub mod client;
 pub mod config;
 pub mod demo;
 pub mod mcp;
+pub mod pair;
 
 pub use client::{validate_vault_path, BridgeError, BridgeSession};
 pub use config::{BridgeConfig, BridgeConfigError};
@@ -13,3 +14,4 @@ pub use demo::{
     DEMO_LAPTOP_CERT_FP,
 };
 pub use mcp::{mcp_tool_schemas, McpBridgeServer};
+pub use pair::{pair_from_bundle, update_paired_token, PairError, PairResult};

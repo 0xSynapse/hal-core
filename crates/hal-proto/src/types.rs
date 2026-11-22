@@ -108,6 +108,15 @@ impl RiskTier {
             _ => None,
         }
     }
+
+    #[must_use]
+    pub const fn as_short_str(&self) -> &'static str {
+        match self {
+            Self::L0ReadOnly => "L0",
+            Self::L1ReversibleCow => "L1",
+            Self::L2IrreversibleOrExternal => "L2",
+        }
+    }
 }
 
 /// Four-level global system degradation state machine.

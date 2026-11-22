@@ -1,4 +1,7 @@
-use hal_bridge::{run_self_test, BridgeConfig, BridgeSession, McpBridgeServer, TriNodeDemoCluster, TriNodeDemoConfig};
+use hal_bridge::{
+    pair_from_bundle, run_self_test, update_paired_token, BridgeConfig, BridgeSession,
+    McpBridgeServer, TriNodeDemoCluster, TriNodeDemoConfig,
+};
 use serde_json::Value;
 use std::io::{self, BufReader};
 use std::net::SocketAddr;
@@ -8,7 +11,7 @@ use std::time::{Duration, Instant};
 
 fn print_usage() {
     println!(
-        "Usage:\n  hal-bridge --config <path> --check\n  hal-bridge --config <path> ping\n  hal-bridge --config <path> propose --target <path> --action <op> --reason <text> [--args <json>] [--episode <id>]\n  hal-bridge --config <path> mcp\n  hal-bridge demo [--oob-bind <addr>] [--gateway-bind <addr>] [--state-dir <dir>] [--token <secret>] [--seed-l2] [--self-test] [--duration-ms <ms>]"
+        "Usage:\n  hal-bridge pair --bundle <path> --out-dir <dir> [--gateway-addr <ip:port>] [--episode <id>] [--json]\n  hal-bridge pair --token <path> --out-dir <dir> [--agent-id <id>] [--json]\n  hal-bridge --config <path> --check\n  hal-bridge --config <path> ping\n  hal-bridge --config <path> propose --target <path> --action <op> --reason <text> [--args <json>] [--episode <id>]\n  hal-bridge --config <path> mcp\n  hal-bridge demo [--oob-bind <addr>] [--gateway-bind <addr>] [--state-dir <dir>] [--token <secret>] [--seed-l2] [--self-test] [--duration-ms <ms>]"
     );
 }
 
@@ -41,6 +44,9 @@ fn main() -> ExitCode {
 
     if args[1] == "demo" {
         return run_demo_cli(&args[2..]);
+    }
+    if args[1] == "pair" {
+        return run_pair_cli(&args[2..]);
     }
 
     let mut cfg_path: Option<PathBuf> = None;
@@ -349,4 +355,126 @@ fn run_demo_cli(args: &[String]) -> ExitCode {
     }
     cluster.shutdown();
     ExitCode::SUCCESS
+}
+
+fn run_pair_cli(args: &[String]) -> ExitCode {
+    let mut bundle_path: Option<PathBuf> = None;
+    let mut token_path: Option<PathBuf> = None;
+    let mut out_dir: Option<PathBuf> = None;
+    let mut gateway_override: Option<String> = None;
+    let mut episode_override: Option<String> = None;
+    let mut agent_id: Option<String> = None;
+    let mut json_out = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--bundle" => match take_opt(args, &mut i) {
+                Ok(v) => bundle_path = Some(PathBuf::from(v)),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--token" => match take_opt(args, &mut i) {
+                Ok(v) => token_path = Some(PathBuf::from(v)),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--out-dir" => match take_opt(args, &mut i) {
+                Ok(v) => out_dir = Some(PathBuf::from(v)),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--gateway-addr" => match take_opt(args, &mut i) {
+                Ok(v) => gateway_override = Some(v),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--episode" => match take_opt(args, &mut i) {
+                Ok(v) => episode_override = Some(v),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--agent-id" => match take_opt(args, &mut i) {
+                Ok(v) => agent_id = Some(v),
+                Err(e) => {
+                    eprintln!("{e}");
+                    return ExitCode::from(2);
+                }
+            },
+            "--json" => {
+                json_out = true;
+                i += 1;
+            }
+            "--help" | "-h" => {
+                print_usage();
+                return ExitCode::SUCCESS;
+            }
+            other => {
+                eprintln!("Unknown flag in 'hal-bridge pair': {other}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+
+    let Some(out_dir) = out_dir else {
+        eprintln!("hal-bridge pair requires --out-dir <dir>");
+        return ExitCode::from(2);
+    };
+
+    let res = match (bundle_path, token_path) {
+        (Some(bundle), None) => pair_from_bundle(
+            &bundle,
+            &out_dir,
+            gateway_override.as_deref(),
+            episode_override.as_deref(),
+        ),
+        (None, Some(token)) => update_paired_token(&token, &out_dir, agent_id.as_deref()),
+        (Some(_), Some(_)) => {
+            eprintln!("hal-bridge pair accepts either --bundle or --token, not both");
+            return ExitCode::from(2);
+        }
+        (None, None) => {
+            eprintln!("hal-bridge pair requires --bundle <path> or --token <path>");
+            return ExitCode::from(2);
+        }
+    };
+
+    match res {
+        Ok(paired) => {
+            if json_out {
+                match serde_json::to_string_pretty(&paired) {
+                    Ok(s) => println!("{s}"),
+                    Err(e) => {
+                        eprintln!("hal-bridge JSON error: {e}");
+                        return ExitCode::from(1);
+                    }
+                }
+            } else {
+                println!(
+                    "BRIDGE_PAIRED agent_id={} gateway={} config={} token={} token_id={} expires_at_ms={}",
+                    paired.agent_id,
+                    paired.gateway_addr,
+                    paired.config_path.display(),
+                    paired.token_path.display(),
+                    paired.token_id,
+                    paired.token_expires_at_ms
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("hal-bridge pair error: {err}");
+            ExitCode::from(1)
+        }
+    }
 }

@@ -168,8 +168,11 @@ fn main() -> ExitCode {
         }
     };
 
+    let peers_snapshot = cfg.peers.clone();
     let mut state = GatewayState::new(cfg, token_secret, audit);
+    let mut explicit_agents = std::collections::BTreeSet::new();
     for (agent_id, env_name) in peer_key_envs {
+        explicit_agents.insert(agent_id.clone());
         match std::env::var(&env_name) {
             Ok(val) if !val.trim().is_empty() => {
                 state.set_peer_key(agent_id, val.into_bytes());
@@ -179,6 +182,18 @@ fn main() -> ExitCode {
                     "hal-gateway missing or empty peer proof key env '{env_name}' for '{agent_id}'"
                 );
                 return ExitCode::from(2);
+            }
+        }
+    }
+
+    for peer in peers_snapshot {
+        if !peer.enabled || explicit_agents.contains(&peer.agent_id) {
+            continue;
+        }
+        let derived_env = hal_proto::env_var_name_for_peer(&peer.agent_id);
+        if let Ok(val) = std::env::var(&derived_env) {
+            if !val.trim().is_empty() {
+                state.set_peer_key(peer.agent_id, val.into_bytes());
             }
         }
     }

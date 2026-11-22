@@ -18,11 +18,11 @@ hal-audit.workspace = true
 hal-bus.workspace = true
 hal-os-hal.workspace = true
 hal-workspace.workspace = true
+hal-gateway.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-hal-gateway.workspace = true
 hal-watchdog.workspace = true
 adapter-netmon.workspace = true
 adapter-sim-ship.workspace = true

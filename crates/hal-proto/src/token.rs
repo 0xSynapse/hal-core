@@ -137,6 +137,12 @@ fn parse_glob_pattern(pattern: &str) -> Option<GlobKind<'_>> {
     }
 }
 
+/// Validates whether a Habitat path glob pattern is well-formed.
+#[must_use]
+pub fn is_valid_path_pattern(pattern: &str) -> bool {
+    parse_glob_pattern(pattern).is_some()
+}
+
 /// Validates a concrete Habitat path and tests whether it matches `pattern`.
 #[must_use]
 pub fn path_matches_pattern(path: &str, pattern: &str) -> bool {

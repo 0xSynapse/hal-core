@@ -23,6 +23,7 @@ struct RawBridgeConfig {
     agent_id: String,
     cert_sha256: String,
     peer_proof_key: Option<String>,
+    peer_proof_key_file: Option<PathBuf>,
     peer_proof_key_env: Option<String>,
     cap_token_path: Option<PathBuf>,
     cap_token_json: Option<String>,
@@ -120,7 +121,12 @@ impl BridgeConfig {
             ));
         }
 
-        let proof_key_str = resolve_proof_key(raw.peer_proof_key_env.as_deref(), raw.peer_proof_key)?;
+        let proof_key_str = resolve_proof_key(
+            raw.peer_proof_key_env.as_deref(),
+            raw.peer_proof_key_file.as_deref(),
+            raw.peer_proof_key,
+            base_dir,
+        )?;
         let cap_token_raw = resolve_cap_token_json(
             raw.cap_token_json,
             raw.cap_token_path.as_deref(),
@@ -154,7 +160,9 @@ impl BridgeConfig {
 
 fn resolve_proof_key(
     env_var: Option<&str>,
+    key_file: Option<&Path>,
     literal: Option<String>,
+    base_dir: &Path,
 ) -> Result<String, BridgeConfigError> {
     if let Some(name) = env_var.map(str::trim).filter(|s| !s.is_empty()) {
         if let Ok(val) = std::env::var(name) {
@@ -163,11 +171,40 @@ fn resolve_proof_key(
             }
         }
     }
+    if let Some(rel_or_abs) = key_file {
+        let resolved = if rel_or_abs.is_absolute() {
+            rel_or_abs.to_path_buf()
+        } else {
+            base_dir.join(rel_or_abs)
+        };
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&resolved)?.permissions().mode();
+            if (mode & 0o077) != 0 {
+                return Err(BridgeConfigError::Validation(format!(
+                    "peer_proof_key_file '{}' has overly permissive mode {:03o}; require 0600",
+                    resolved.display(),
+                    mode & 0o777
+                )));
+            }
+        }
+        let raw = std::fs::read_to_string(&resolved)?;
+        let trimmed = raw.trim_end_matches(['\r', '\n']);
+        if trimmed.trim().is_empty() {
+            return Err(BridgeConfigError::Validation(format!(
+                "peer_proof_key_file '{}' is empty",
+                resolved.display()
+            )));
+        }
+        return Ok(trimmed.to_string());
+    }
     if let Some(lit) = literal.filter(|s| !s.trim().is_empty()) {
         return Ok(lit);
     }
     Err(BridgeConfigError::Validation(
-        "peer_proof_key or non-empty peer_proof_key_env must be configured".to_string(),
+        "peer_proof_key, peer_proof_key_file, or non-empty peer_proof_key_env must be configured"
+            .to_string(),
     ))
 }
 
@@ -266,5 +303,50 @@ mod tests {
             BridgeConfig::from_toml_str(&bad_fp),
             Err(BridgeConfigError::Validation(_))
         ));
+    }
+
+    #[test]
+    fn loads_peer_proof_key_file_with_0600_and_rejects_permissive_mode() {
+        let dir = std::env::temp_dir().join(format!(
+            "hal_p5c_bridge_keyfile_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let tok_path = dir.join("remote-laptop-01.cap.json");
+        std::fs::write(
+            &tok_path,
+            serde_json::to_string_pretty(&sample_token("remote-laptop-01")).unwrap(),
+        )
+        .unwrap();
+
+        let key_path = dir.join("remote-laptop-01.proof.key");
+        std::fs::write(&key_path, "secret-proof-key-hex\n").unwrap();
+
+        let cfg_path = dir.join("laptop-bridge.toml");
+        std::fs::write(
+            &cfg_path,
+            format!(
+                "version = 1\ngateway_addr = \"127.0.0.1:9443\"\nagent_id = \"remote-laptop-01\"\ncert_sha256 = \"{}\"\npeer_proof_key_file = \"./remote-laptop-01.proof.key\"\ncap_token_path = \"./remote-laptop-01.cap.json\"\n",
+                "a".repeat(64)
+            ),
+        )
+        .unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(matches!(
+                BridgeConfig::from_file(&cfg_path),
+                Err(BridgeConfigError::Validation(_))
+            ));
+            std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+
+        let loaded = BridgeConfig::from_file(&cfg_path).unwrap();
+        assert_eq!(loaded.peer_proof_key, b"secret-proof-key-hex");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

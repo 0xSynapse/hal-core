@@ -1,7 +1,9 @@
-use hal_proto::RiskTier;
+use hal_proto::{is_valid_agent_id, is_valid_hex_64, RiskTier};
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::fmt;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 
@@ -226,6 +228,150 @@ impl GatewayConfig {
             .iter()
             .find(|p| p.enabled && p.cert_sha256 == cert_sha256)
     }
+
+    #[must_use]
+    pub fn empty_default_deny() -> Self {
+        Self {
+            version: 1,
+            default_policy: "deny".to_string(),
+            require_cert_proof: true,
+            peers: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn find_by_agent(&self, agent_id: &str) -> Option<&RemotePeerRule> {
+        self.peers.iter().find(|p| p.agent_id == agent_id)
+    }
+
+    /// Inserts or replaces a peer rule after checking uniqueness and format invariants.
+    /// Returns `Ok(true)` if an existing peer was replaced, `Ok(false)` if inserted.
+    pub fn upsert_peer(
+        &mut self,
+        rule: RemotePeerRule,
+        replace: bool,
+    ) -> Result<bool, GatewayConfigError> {
+        if !is_valid_agent_id(&rule.agent_id) {
+            return Err(GatewayConfigError::Validation(format!(
+                "invalid peer agent_id '{}'",
+                rule.agent_id
+            )));
+        }
+        if !is_valid_hex_64(&rule.cert_sha256) {
+            return Err(GatewayConfigError::Validation(format!(
+                "peer '{}' cert_sha256 must be 64 lowercase hex characters",
+                rule.agent_id
+            )));
+        }
+        if rule.allowed_cidrs.is_empty() {
+            return Err(GatewayConfigError::Validation(format!(
+                "peer '{}' must specify at least one allowed_cidr",
+                rule.agent_id
+            )));
+        }
+        if let Some(conflict) = self
+            .peers
+            .iter()
+            .find(|p| p.agent_id != rule.agent_id && p.cert_sha256 == rule.cert_sha256)
+        {
+            return Err(GatewayConfigError::Validation(format!(
+                "cert_sha256 '{}' is already assigned to peer '{}'",
+                rule.cert_sha256, conflict.agent_id
+            )));
+        }
+
+        if let Some(existing) = self.peers.iter_mut().find(|p| p.agent_id == rule.agent_id) {
+            if !replace {
+                return Err(GatewayConfigError::Validation(format!(
+                    "peer '{}' already exists (use --replace to overwrite)",
+                    rule.agent_id
+                )));
+            }
+            *existing = rule;
+            return Ok(true);
+        }
+
+        self.peers.push(rule);
+        Ok(false)
+    }
+
+    #[must_use]
+    pub fn to_toml_string(&self) -> String {
+        let mut out = format!(
+            "version = {}\ndefault_policy = {}\nrequire_cert_proof = {}\n",
+            self.version,
+            toml_basic_string(&self.default_policy),
+            self.require_cert_proof
+        );
+        for peer in &self.peers {
+            out.push_str("\n[[peers]]\n");
+            out.push_str(&format!("agent_id = {}\n", toml_basic_string(&peer.agent_id)));
+            out.push_str(&format!(
+                "cert_sha256 = {}\n",
+                toml_basic_string(&peer.cert_sha256)
+            ));
+            let cidrs: Vec<String> = peer
+                .allowed_cidrs
+                .iter()
+                .map(|c| toml_basic_string(c.as_str()))
+                .collect();
+            out.push_str(&format!("allowed_cidrs = [{}]\n", cidrs.join(", ")));
+            out.push_str(&format!(
+                "max_risk_tier = {}\n",
+                toml_basic_string(peer.max_risk_tier.as_short_str())
+            ));
+            out.push_str(&format!("enabled = {}\n", peer.enabled));
+        }
+        out
+    }
+
+    pub fn write_file_atomic(&self, path: impl AsRef<Path>) -> Result<(), GatewayConfigError> {
+        let rendered = self.to_toml_string();
+        Self::from_toml_str(&rendered)?;
+
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        let file_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("gateway-peers.toml");
+        let tmp = path.with_file_name(format!(".{file_name}.tmp-{}", std::process::id()));
+        {
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o644);
+            }
+            let mut file = opts.open(&tmp)?;
+            file.write_all(rendered.as_bytes())?;
+            file.sync_all()?;
+        }
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    }
+}
+
+fn toml_basic_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[cfg(test)]
@@ -283,5 +429,50 @@ max_risk_tier = "L0"
             GatewayConfig::from_toml_str(bad_cidr),
             Err(GatewayConfigError::Validation(_))
         ));
+    }
+
+    #[test]
+    fn upsert_peer_and_atomic_toml_roundtrip() {
+        let mut cfg = GatewayConfig::empty_default_deny();
+        let peer1 = RemotePeerRule {
+            agent_id: "remote-laptop-01".to_string(),
+            cert_sha256: "a".repeat(64),
+            allowed_cidrs: vec![Ipv4Cidr::parse("10.99.0.10/32").unwrap()],
+            max_risk_tier: RiskTier::L1ReversibleCow,
+            enabled: true,
+        };
+        assert!(!cfg.upsert_peer(peer1.clone(), false).unwrap());
+        assert!(matches!(
+            cfg.upsert_peer(peer1.clone(), false),
+            Err(GatewayConfigError::Validation(_))
+        ));
+
+        let conflicting_cert = RemotePeerRule {
+            agent_id: "remote-laptop-02".to_string(),
+            cert_sha256: "a".repeat(64),
+            allowed_cidrs: vec![Ipv4Cidr::parse("10.99.0.11/32").unwrap()],
+            max_risk_tier: RiskTier::L0ReadOnly,
+            enabled: true,
+        };
+        assert!(matches!(
+            cfg.upsert_peer(conflicting_cert, false),
+            Err(GatewayConfigError::Validation(_))
+        ));
+
+        let mut peer1_updated = peer1;
+        peer1_updated.max_risk_tier = RiskTier::L2IrreversibleOrExternal;
+        assert!(cfg.upsert_peer(peer1_updated, true).unwrap());
+        assert_eq!(
+            cfg.find_by_agent("remote-laptop-01").unwrap().max_risk_tier,
+            RiskTier::L2IrreversibleOrExternal
+        );
+
+        let dir = std::env::temp_dir().join(format!("hal_p5c_gw_cfg_{}", std::process::id()));
+        let path = dir.join("gateway-peers.toml");
+        cfg.write_file_atomic(&path).unwrap();
+        let reloaded = GatewayConfig::from_file(&path).unwrap();
+        assert_eq!(reloaded.peers.len(), 1);
+        assert_eq!(reloaded.peers[0], cfg.peers[0]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
