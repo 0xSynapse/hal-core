@@ -60,7 +60,7 @@ else
   fail "Boot environment pre-hal-phase0 missing"
 fi
 
-SSH_LISTEN="$(sockstat -4 -l -P tcp 2>/dev/null | awk '$6 ~ /:22$/ {print $6}' || true)"
+SSH_LISTEN="$(sockstat -4 -l -P tcp 2>/dev/null | awk '$6 ~ /:22$/ {print $6}' | sort -u || true)"
 if [ "${SSH_LISTEN}" = "192.168.100.10:22" ]; then
   pass "sshd bound strictly to mgmt0 (192.168.100.10:22)"
 else
@@ -76,16 +76,33 @@ else
   fail "Missing mgmt0 or wan0 interface"
 fi
 
-if pfctl -sr 2>/dev/null | grep -q 'block drop out log quick on wan0 all'; then
+if pfctl -sr 2>/dev/null | grep -Eq 'block .*out log quick on wan0 all'; then
   pass "PF wan0 default-deny outbound rule active"
 else
   fail "PF wan0 default-deny outbound rule missing"
 fi
 
-if su -m _hal_ag_research -c 'nc -z -w 2 1.1.1.1 443' >/dev/null 2>&1; then
+pf_wan_drop_packets() {
+  pfctl -v -sr 2>/dev/null | awk '
+    /block .*out log quick on wan0 all/ {
+      if (getline > 0) {
+        for (i = 1; i <= NF; i++) {
+          if ($i == "Packets:") { print $(i + 1); exit }
+        }
+      }
+    }'
+}
+
+PKT_BEFORE="$(pf_wan_drop_packets || echo 0)"
+if SHELL=/bin/sh su -m _hal_ag_research -c 'nc -z -w 2 1.1.1.1 443' >/dev/null 2>&1; then
   fail "Non-broker user _hal_ag_research unexpectedly reached 1.1.1.1:443"
 else
-  pass "Non-broker outbound connection blocked by PF"
+  PKT_AFTER="$(pf_wan_drop_packets || echo 0)"
+  if [ "${PKT_AFTER:-0}" -gt "${PKT_BEFORE:-0}" ]; then
+    pass "Non-broker outbound connection actively blocked by PF (wan0 drop packets ${PKT_BEFORE:-0} -> ${PKT_AFTER:-0})"
+  else
+    pass "Non-broker outbound connection blocked (exit!=0; wan0 drop packets ${PKT_BEFORE:-0} -> ${PKT_AFTER:-0})"
+  fi
 fi
 
 # ------------------------------------------------------------------
@@ -94,10 +111,11 @@ fi
 ENC="$(zfs get -H -o value encryption halpool/vault 2>/dev/null || true)"
 EXEC_PROP="$(zfs get -H -o value exec halpool/vault 2>/dev/null || true)"
 SETUID_PROP="$(zfs get -H -o value setuid halpool/vault 2>/dev/null || true)"
-if [ "${ENC}" = "aes-256-gcm" ] && [ "${EXEC_PROP}" = "off" ] && [ "${SETUID_PROP}" = "off" ]; then
-  pass "halpool/vault encrypted (aes-256-gcm) with exec=off, setuid=off"
+MOUNTED_PROP="$(zfs get -H -o value mounted halpool/vault 2>/dev/null || true)"
+if [ "${ENC}" = "aes-256-gcm" ] && [ "${EXEC_PROP}" = "off" ] && [ "${SETUID_PROP}" = "off" ] && [ "${MOUNTED_PROP}" = "yes" ]; then
+  pass "halpool/vault encrypted (aes-256-gcm), auto-mounted across reboot, exec=off, setuid=off"
 else
-  fail "halpool/vault properties unexpected: enc=${ENC}, exec=${EXEC_PROP}, setuid=${SETUID_PROP}"
+  fail "halpool/vault properties unexpected: enc=${ENC}, mounted=${MOUNTED_PROP}, exec=${EXEC_PROP}, setuid=${SETUID_PROP}"
 fi
 
 if ls -lo /pool/audit/hal-audit.log 2>/dev/null | grep -q 'sappnd'; then
@@ -154,15 +172,26 @@ fi
 # ------------------------------------------------------------------
 # Suite 5: Multi-Agent No-IP Jail Isolation & RCTL Quotas
 # ------------------------------------------------------------------
-service jail onestart agent_research >/dev/null 2>&1 || true
-service jail onestart agent_vault >/dev/null 2>&1 || true
-/etc/rc.d/rctl start >/dev/null 2>&1 || true
+for jname in agent_research agent_vault; do
+  if ! jls -j "${jname}" >/dev/null 2>&1; then
+    service jail onestart "${jname}" >/dev/null || true
+  fi
+done
+if [ -z "$(rctl jail:agent_research 2>/dev/null || true)" ]; then
+  service rctl onestart || true
+fi
 
 JAIL_NET="$(jexec agent_research /sbin/ifconfig 2>/dev/null || true)"
-if echo "${JAIL_NET}" | grep -qE 'mgmt0|wan0|inet '; then
-  fail "agent_research Jail unexpectedly sees host NICs or IP addresses"
+if echo "${JAIL_NET}" | grep -qE 'inet |inet6 '; then
+  fail "agent_research Jail unexpectedly sees IPv4/IPv6 addresses"
+elif jexec agent_research /usr/bin/nc -z -w 1 192.168.100.10 22 >/dev/null 2>&1; then
+  fail "agent_research Jail unexpectedly reached mgmt0 SSH"
+elif jexec agent_research /usr/bin/nc -z -w 1 1.1.1.1 443 >/dev/null 2>&1; then
+  fail "agent_research Jail unexpectedly reached wan0 outbound"
+elif jexec agent_research /sbin/ping -c 1 127.0.0.1 >/dev/null 2>&1; then
+  fail "agent_research Jail unexpectedly has raw socket / loopback ICMP"
 else
-  pass "agent_research Jail has zero IP addresses and zero host NIC visibility"
+  pass "agent_research Jail has zero IP addresses, zero sockets, and zero mgmt0/wan0 reachability"
 fi
 
 if jexec agent_research /bin/ls /pool/vault >/dev/null 2>&1; then
@@ -177,10 +206,13 @@ else
   fail "agent_research UDS directory isolation check failed"
 fi
 
-if rctl -l jail:agent_research 2>/dev/null | grep -q 'memoryuse:deny'; then
-  pass "RCTL resource quotas active on jail:agent_research"
+RCTL_RULES="$(rctl jail:agent_research 2>&1 || true)"
+if printf '%s\n' "${RCTL_RULES}" | grep -q 'memoryuse:deny=' \
+  && printf '%s\n' "${RCTL_RULES}" | grep -q 'maxproc:deny=64' \
+  && printf '%s\n' "${RCTL_RULES}" | grep -q 'pcpu:deny=50'; then
+  pass "RCTL resource quotas active on jail:agent_research (memoryuse, maxproc=64, pcpu=50)"
 else
-  fail "RCTL rules not active on jail:agent_research"
+  fail "RCTL rules not active on jail:agent_research (output: ${RCTL_RULES})"
 fi
 
 echo

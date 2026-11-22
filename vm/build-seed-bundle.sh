@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-IMAGES_DIR="${ROOT_DIR}/vm/images"
+IMAGES_DIR="${HAL_IMAGES_DIR:-/var/tmp/hal-os-vm}"
 OUT_TAR="${IMAGES_DIR}/hal-seed.tar"
 
 SSH_PUBKEY="${HAL_SSH_PUBKEY:-}"

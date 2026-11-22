@@ -32,13 +32,15 @@ fi
 
 # 3. Create dedicated halpool on /dev/vtbd1 and datasets
 echo "[3/9] Configuring halpool datasets on vtbd1..."
+mkdir -p /etc/zfs
 if ! zpool list halpool >/dev/null 2>&1; then
   if [ ! -e /dev/vtbd1 ]; then
     echo "Error: /dev/vtbd1 not found. Attach the 32G halpool disk in QEMU." >&2
     exit 1
   fi
-  zpool create -f -o ashift=12 -O compression=lz4 -O atime=off halpool /dev/vtbd1
+  zpool create -f -m none -o ashift=12 -O compression=lz4 -O atime=off halpool /dev/vtbd1
 fi
+zpool set cachefile=/etc/zfs/zpool.cache halpool
 
 if [ ! -f /root/.hal-vault.key ]; then
   dd if=/dev/urandom of=/root/.hal-vault.key bs=32 count=1 >/dev/null 2>&1
@@ -119,7 +121,7 @@ chown _hal_audit:_hal_audit /pool/audit/hal-audit.log
 chmod 0640 /pool/audit/hal-audit.log
 chflags sappnd /pool/audit/hal-audit.log
 
-# 7. Install kernel loader, rc.conf.d, PF, SSH OOB, Jail & policy templates
+# 7. Install kernel loader, rc.conf.local, PF, SSH OOB, Jail & policy templates
 echo "[7/9] Installing FreeBSD spinal configs..."
 touch /boot/loader.conf
 while IFS= read -r line; do
@@ -127,22 +129,28 @@ while IFS= read -r line; do
     ""|\#*) continue ;;
   esac
   key="${line%%=*}"
-  if ! grep -q "^${key}=" /boot/loader.conf; then
-    echo "${line}" >> /boot/loader.conf
-  fi
+  grep -v "^${key}=" /boot/loader.conf > /boot/loader.conf.tmp || true
+  mv /boot/loader.conf.tmp /boot/loader.conf
+  echo "${line}" >> /boot/loader.conf
 done < "${CFG_DIR}/freebsd/loader.conf"
 
-mkdir -p /etc/rc.conf.d
-cp "${CFG_DIR}/freebsd/rc.conf.hal" /etc/rc.conf.d/hal
+cp "${CFG_DIR}/freebsd/rc.conf.hal" /etc/rc.conf.local
 
 cp "${CFG_DIR}/freebsd/pf.conf" /etc/pf.conf
+kldload -n pf >/dev/null 2>&1 || true
 pfctl -nf /etc/pf.conf
 
 mkdir -p /etc/ssh/sshd_config.d
 cp "${CFG_DIR}/freebsd/sshd-hal-oob.conf" /etc/ssh/sshd_config.d/hal-oob.conf
-if ! grep -q 'sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then
-  echo 'Include /etc/ssh/sshd_config.d/*.conf' >> /etc/ssh/sshd_config
-fi
+touch /etc/ssh/sshd_config
+grep -vE '^Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf$' /etc/ssh/sshd_config > /etc/ssh/sshd_config.tmp || true
+{
+  echo 'Include /etc/ssh/sshd_config.d/*.conf'
+  cat /etc/ssh/sshd_config.tmp
+} > /etc/ssh/sshd_config
+rm -f /etc/ssh/sshd_config.tmp
+service sshd onekeygen >/dev/null 2>&1 || true
+sshd -t
 
 if [ -f "${BUNDLE_ROOT}/ssh/authorized_keys" ]; then
   mkdir -p /root/.ssh

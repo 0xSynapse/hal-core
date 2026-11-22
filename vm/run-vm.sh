@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-IMAGES_DIR="${ROOT_DIR}/vm/images"
+IMAGES_DIR="${HAL_IMAGES_DIR:-/var/tmp/hal-os-vm}"
 
 SYS_DISK="${HAL_SYS_DISK:-${IMAGES_DIR}/freebsd14-sys.qcow2}"
 DATA_DISK="${HAL_DATA_DISK:-${IMAGES_DIR}/halpool-data.qcow2}"
@@ -110,7 +110,7 @@ fi
 
 if [[ "${NET_MODE}" == "user" ]]; then
   CMD+=(
-    -netdev "user,id=net_mgmt,net=192.168.100.0/24,dhcpstart=192.168.100.10,restrict=on,hostfwd=tcp:127.0.0.1:${SSH_FWD_PORT}-:22,hostfwd=tcp:127.0.0.1:${OOB_FWD_PORT}-:8443"
+    -netdev "user,id=net_mgmt,net=192.168.100.0/24,dhcpstart=192.168.100.10,restrict=on,hostfwd=tcp:127.0.0.1:${SSH_FWD_PORT}-192.168.100.10:22,hostfwd=tcp:127.0.0.1:${OOB_FWD_PORT}-192.168.100.10:8443"
   )
 else
   CMD+=(

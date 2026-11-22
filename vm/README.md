@@ -1,10 +1,11 @@
 # HAL-OS Phase 0 Testbed Runbook (FreeBSD 14 + QEMU/KVM)
 
 This directory contains host and guest provisioning scripts for the **Phase 0** dual-NIC, dual-disk FreeBSD 14 testbed.
+VM disk images are stored outside the git workspace by default at `/var/tmp/hal-os-vm` (override via `HAL_IMAGES_DIR`).
 
 ## Topology Summary
 
-- **`vtbd0` (`16G`)**: FreeBSD 14.3 ZFS system disk (`zroot` + `bectl` boot environments).
+- **`vtbd0` (`16G`)**: FreeBSD 14.5 ZFS system disk (`zroot` + `bectl` boot environments).
 - **`vtbd1` (`32G`)**: Dedicated `halpool` data disk (`halpool/vault` encrypted AES-256-GCM, `workspaces`, `memory`, `jails`, `audit` with `chflags sappnd`).
 - **`vtbd2` (`hal-seed.tar`, read-only)**: Offline provisioning bundle carrying `config/` and `vm/freebsd/`.
 - **`vtnet0` (`mgmt0`)**: Out-of-band human control plane (`192.168.100.10/24`). Default `user` mode uses QEMU SLIRP with `restrict=on` and forwards host `127.0.0.1:2222 -> 22` and `127.0.0.1:8443 -> 8443` with zero host `sudo` required.
@@ -32,6 +33,15 @@ Pass your SSH public key explicitly so `mgmt0` key-only SSH works immediately:
 *(Optional: use `--net-mode bridge` if you defined `vm/libvirt/hal-mgmt-net.xml` in libvirt, or `--accel tcg` if `/dev/kvm` is unavailable.)*
 
 ### 4. Initialize Phase 0 Inside FreeBSD Serial Console
+On the **very first boot** of the official image, press **`3`** at the FreeBSD Beastie loader menu to open the `OK` prompt and enable serial console before booting:
+```text
+set console="comconsole,vidconsole"
+set boot_multicons="YES"
+set boot_serial="YES"
+boot
+```
+*(Or press `5` until `Cons: Dual (Serial primary)` is selected. Subsequent reboots apply `config/freebsd/loader.conf` automatically.)*
+
 Log in as `root` (default official VM image has no initial password) and run:
 ```sh
 mkdir -p /tmp/hal && tar -xf /dev/vtbd2 -C /tmp/hal

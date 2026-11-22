@@ -10,6 +10,10 @@ vm/images/*.xz
 vm/images/*.iso
 vm/images/*.tar
 vm/images/CHECKSUM.*
+vm/images/hal-oob-*
+vm/images/*.log
+vm/images/*.txt
+vm/images/*.sock
 
 # Local secrets & environment overrides
 .env
